@@ -169,18 +169,20 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     fun moveBody(b: Body, ddx: Float, ddy: Float, radius: Float, wrapX: Boolean, wrapYAxis: Boolean): Int {
         var hit = 0
         val half = radius * 0.85f
+        // A body that somehow starts inside a wall is allowed to walk out rather than being glued in.
+        val solid = hasWalls && !boxHitsWall(b.x, b.y, half)
         var nx = b.x + ddx
         if (wrapX) nx = Geo.wrap(nx, w)
         else if (nx < radius) { nx = radius; hit = hit or 1 }
         else if (nx > w - radius) { nx = w - radius; hit = hit or 1 }
-        if (hasWalls && boxHitsWall(nx, b.y, half)) { nx = b.x; hit = hit or 1 }
+        if (solid && boxHitsWall(nx, b.y, half)) { nx = b.x; hit = hit or 1 }
         b.x = nx
 
         var ny = b.y + ddy
         if (wrapYAxis && wrapY) ny = Geo.wrap(ny, h)
         else if (ny < radius) { ny = radius; hit = hit or 2 }
         else if (ny > h - radius) { ny = h - radius; hit = hit or 2 }
-        if (hasWalls && boxHitsWall(b.x, ny, half)) { ny = b.y; hit = hit or 2 }
+        if (solid && boxHitsWall(b.x, ny, half)) { ny = b.y; hit = hit or 2 }
         b.y = ny
         b.px = b.x; b.py = b.y; b.tween = 1f
         return hit
@@ -517,7 +519,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             var ny = p.y + p.faceY * hop
             if (nx < 0f || nx >= w) { if (!playerWrapX) break; nx = Geo.wrap(nx, w); wrapped = true }
             if (ny < 0f || ny >= h) { if (!playerWrapY) break; ny = Geo.wrap(ny, h); wrapped = true }
-            if (isWallAt(nx, ny)) break
+            if (hasWalls && boxHitsWall(nx, ny, PLAYER_RADIUS * 0.85f)) break
             p.x = nx; p.y = ny
             if (loadout.dashStun) for (e in enemies) if (dist(e.x, e.y, nx, ny) < 1.1f) stun(e, 2f)
             // Hoover up anything the dash passes through.
@@ -546,8 +548,9 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
     companion object {
         const val UNREACHABLE = Int.MAX_VALUE
-        const val PICKUP = 0.66f
+        const val PICKUP = 0.72f
         const val TOUCH = 0.6f
+        const val PLAYER_RADIUS = 0.3f
         const val MAX_COMBO = 9
         const val COMBO_WINDOW = 3.2f
         const val NOVA_COST = 10

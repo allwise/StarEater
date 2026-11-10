@@ -280,6 +280,7 @@ class GlideMovement : ContinuousMovement(MoveKind.GLIDE, accel = 34f, drag = 1.8
 
 /** Mode 3: a top-down scroller. Stars stream down from the top; you only wrap sideways. */
 class ScrollMovement : ContinuousMovement(MoveKind.SCROLL, accel = 70f, drag = 7f, maxSpeed = 9f) {
+    override val enemySpeedFactor = 1.15f
     private var starTimer = 0f
 
     override fun updateWorld(w: World, dt: Float) {

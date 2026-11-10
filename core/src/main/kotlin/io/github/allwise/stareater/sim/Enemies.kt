@@ -53,7 +53,7 @@ object Eater : EnemyType("eater", 'E', "EATER", "Walks straight at you. Cannot w
 }
 
 /** S - aims at where you are going rather than where you are. */
-object Stalker : EnemyType("stalker", 'S', "STALKER", "Heads you off: aims where you are going.", 0.9f, 1, 1f) {
+object Stalker : EnemyType("stalker", 'S', "STALKER", "Aims at where you are going.", 0.9f, 1, 1f) {
     override fun think(w: World, e: Enemy, dt: Float) {
         e.pace = 1f
         val p = w.player
@@ -70,7 +70,7 @@ object Stalker : EnemyType("stalker", 'S', "STALKER", "Heads you off: aims where
 }
 
 /** B - does not care about you at all, which somehow makes it worse. */
-object Bouncer : EnemyType("bouncer", 'B', "BOUNCER", "Ricochets around diagonally. Ignores you.", 1.2f, 2, 0.6f) {
+object Bouncer : EnemyType("bouncer", 'B', "BOUNCER", "Ricochets diagonally. Ignores you.", 1.2f, 2, 0.6f) {
     override fun init(w: World, e: Enemy) {
         e.ballistic = true
         e.dirX = if (w.rng.nextBoolean()) DIAG else -DIAG
@@ -159,7 +159,7 @@ object Zoomer : EnemyType("zoomer", 'Z', "ZOOMER", "Lines you up, winds up, then
 }
 
 /** W - the one that worked out the trick. Takes the shortest route *including* the wrap. */
-object Warper : EnemyType("warper", 'W', "WARPER", "Knows the wrap trick. Takes the true shortest route.", 0.8f, 4, 0.7f, wrapAware = true) {
+object Warper : EnemyType("warper", 'W', "WARPER", "Knows the wrap trick. Wraps too.", 0.8f, 4, 0.7f, wrapAware = true) {
     override fun think(w: World, e: Enemy, dt: Float) {
         e.pace = 1f
         chase(w, e, w.targetX, w.targetY)
