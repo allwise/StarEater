@@ -12,7 +12,7 @@ val natives: Configuration by configurations.creating
 
 android {
     namespace = "io.github.allwise.stareater.android"
-    compileSdk = 35
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "io.github.allwise.stareater"
