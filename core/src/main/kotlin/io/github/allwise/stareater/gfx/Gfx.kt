@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
+import com.badlogic.gdx.graphics.glutils.PixmapTextureData
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.utils.Align
@@ -52,6 +53,7 @@ class Gfx : Disposable {
     private val shapes = ShapeRenderer()
     private val layout = GlyphLayout()
     private val glowTex: Texture
+    private val glowPixmap: Pixmap
     private val tmp = Color()
 
     lateinit var tiny: BitmapFont
@@ -76,15 +78,18 @@ class Gfx : Disposable {
             val a = (1f - d) * (1f - d)
             pm.drawPixel(x, y, Color.rgba8888(1f, 1f, 1f, a))
         }
-        glowTex = Texture(pm)
+        // Managed, so Android can rebuild it from the pixmap if the GL context is ever lost.
+        glowTex = Texture(PixmapTextureData(pm, null, false, false, true))
+        glowPixmap = pm
         glowTex.setFilter(Texture.TextureFilter.Linear, Texture.TextureFilter.Linear)
-        pm.dispose()
     }
 
     fun resize(width: Int, height: Int) {
         viewport.update(width, height, true)
         // Fonts are rasterised at the real pixel size so text stays crisp on any screen.
-        val scale = max(0.5f, viewport.screenHeight / H)
+        // (backBufferHeight / height covers high-DPI desktops, where a logical pixel is several real ones.)
+        val density = Gdx.graphics.backBufferHeight.toFloat() / max(1, Gdx.graphics.height)
+        val scale = max(0.5f, viewport.screenHeight / H * density)
         if (fontScale == 0f || abs(scale - fontScale) / fontScale > 0.08f) buildFonts(scale)
     }
 
@@ -259,6 +264,7 @@ class Gfx : Disposable {
         batch.dispose()
         shapes.dispose()
         glowTex.dispose()
+        glowPixmap.dispose()
         if (fontScale != 0f) disposeFonts()
     }
 
