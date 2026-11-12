@@ -4,6 +4,7 @@ import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.StarEaterGame
+import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import kotlin.math.abs
@@ -13,6 +14,9 @@ class Button(var x: Float, var y: Float, var w: Float, var h: Float, var label: 
     var visible = true
     var accent: Color = Pal.CYAN
     var small = false
+
+    /** For buttons that make their own noise. */
+    var silent = false
 
     val usable: Boolean get() = enabled && visible
     val cx: Float get() = x + w / 2f
@@ -29,7 +33,13 @@ abstract class Screen(val game: StarEaterGame) {
     protected val buttons = ArrayList<Button>()
     protected var focus = 0
     protected var age = 0f
+
+    /** Set false to draw the buttons with none of them highlighted. */
+    protected var showFocus = true
     private var pressed: Button? = null
+
+    /** True while the screen wants raw letter keys (so global shortcuts must keep their hands off). */
+    open val typing: Boolean get() = false
 
     open fun show() {}
     abstract fun render(dt: Float)
@@ -44,7 +54,7 @@ abstract class Screen(val game: StarEaterGame) {
         if (focus !in buttons.indices || !buttons[focus].usable) focus = buttons.indexOfFirst { it.usable }.coerceAtLeast(0)
         for ((i, b) in buttons.withIndex()) {
             if (!b.visible) continue
-            val focused = i == focus && b.enabled
+            val focused = showFocus && i == focus && b.enabled
             val a = if (b.enabled) 1f else 0.4f
             g.rect(b.x, b.y, b.w, b.h, if (focused) Pal.PANEL_HI else Pal.PANEL, 0.95f * a)
             g.frame(b.x, b.y, b.w, b.h, 2f, if (focused) b.accent else Pal.LINE, a)
@@ -64,7 +74,7 @@ abstract class Screen(val game: StarEaterGame) {
             Keys.DOWN, Keys.S -> moveFocus(0, -1)
             Keys.LEFT, Keys.A -> moveFocus(-1, 0)
             Keys.RIGHT, Keys.D -> moveFocus(1, 0)
-            Keys.ENTER, Keys.NUMPAD_ENTER, Keys.SPACE -> buttons.getOrNull(focus)?.takeIf { it.usable }?.action?.invoke()
+            Keys.ENTER, Keys.NUMPAD_ENTER, Keys.SPACE -> buttons.getOrNull(focus)?.takeIf { it.usable }?.let { click(it) }
             else -> return false
         }
         return true
@@ -88,7 +98,15 @@ abstract class Screen(val game: StarEaterGame) {
             val score = along + across * 2.5f
             if (score < bestScore) { bestScore = score; best = i }
         }
-        if (best >= 0) focus = best
+        if (best >= 0) {
+            focus = best
+            game.audio.play(Sfx.UI_MOVE)
+        }
+    }
+
+    private fun click(b: Button) {
+        if (!b.silent) game.audio.play(Sfx.UI_OK)
+        b.action()
     }
 
     open fun touchDown(x: Float, y: Float, pointer: Int) {
@@ -102,7 +120,7 @@ abstract class Screen(val game: StarEaterGame) {
     open fun touchUp(x: Float, y: Float, pointer: Int) {
         val p = pressed
         pressed = null
-        if (p != null && p.usable && p.contains(x, y)) p.action()
+        if (p != null && p.usable && p.contains(x, y)) click(p)
     }
 
     open fun touchDragged(x: Float, y: Float, pointer: Int) {}

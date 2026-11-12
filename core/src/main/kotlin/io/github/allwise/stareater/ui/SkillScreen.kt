@@ -5,7 +5,10 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.StarEaterGame
+import io.github.allwise.stareater.audio.Sfx
+import io.github.allwise.stareater.audio.Tune
 import io.github.allwise.stareater.gfx.Gfx
+import io.github.allwise.stareater.gfx.Sparkles
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.meta.Branch
 import io.github.allwise.stareater.meta.Skill
@@ -15,6 +18,7 @@ import kotlin.math.abs
 class SkillScreen(game: StarEaterGame) : Screen(game) {
     private var selected = Skill.AEGIS_1
     private var wipeArmed = 0f
+    private val sparkles = Sparkles(game.gfx)
     private lateinit var buy: Button
     private lateinit var wipe: Button
 
@@ -22,6 +26,8 @@ class SkillScreen(game: StarEaterGame) : Screen(game) {
         button(16f, Gfx.H - 50f, 110f, 36f, "BACK") { back() }.small = true
         buy = button(Gfx.W - 216f, 26f, 200f, 46f, "BUY") { purchase() }
         buy.accent = Pal.GOLD
+        buy.silent = true
+        game.audio.tune(Tune.MENU)
         wipe = button(Gfx.W - 126f, Gfx.H - 50f, 110f, 36f, "WIPE SAVE") {
             if (wipeArmed > 0f) { game.profile.reset(); wipeArmed = 0f } else wipeArmed = 3f
         }
@@ -34,7 +40,9 @@ class SkillScreen(game: StarEaterGame) : Screen(game) {
     override fun back() = game.go(MenuScreen(game))
 
     private fun purchase() {
-        game.profile.buy(selected)
+        val bought = game.profile.buy(selected)
+        if (bought) sparkles.burst(nodeX(selected), nodeY(selected), branchColor(selected.branch), 26, 200f)
+        game.audio.play(if (bought) Sfx.UI_BUY else Sfx.UI_NO)
     }
 
     private fun nodeX(s: Skill): Float {
@@ -98,6 +106,7 @@ class SkillScreen(game: StarEaterGame) : Screen(game) {
         buy.enabled = p.canBuy(s)
         buy.label = if (owned) "OWNED" else "BUY  ${s.cost}"
         drawButtons()
+        sparkles.draw(dt)
     }
 
     private fun node(s: Skill) {

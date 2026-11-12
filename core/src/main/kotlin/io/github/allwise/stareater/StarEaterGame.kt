@@ -9,6 +9,7 @@ import com.badlogic.gdx.graphics.Pixmap
 import com.badlogic.gdx.graphics.PixmapIO
 import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.ScreenUtils
+import io.github.allwise.stareater.audio.Audio
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
@@ -25,6 +26,7 @@ import io.github.allwise.stareater.ui.MenuScreen
 import io.github.allwise.stareater.ui.PlayScreen
 import io.github.allwise.stareater.ui.ScoresScreen
 import io.github.allwise.stareater.ui.Screen
+import io.github.allwise.stareater.ui.SeedScreen
 import io.github.allwise.stareater.ui.SkillScreen
 import java.util.zip.Deflater
 
@@ -65,6 +67,8 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         private set
     lateinit var profile: Profile
         private set
+    lateinit var audio: Audio
+        private set
     private var screen: Screen? = null
     private val point = Vector2()
     private var devTime = 0f
@@ -81,6 +85,8 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         gfx.resize(Gdx.graphics.width, Gdx.graphics.height)
         // Dev runs use a throwaway save so they never touch real progress.
         profile = Profile(if (dev != null) MemoryStore() else PrefsStore())
+        audio = Audio(profile)
+        audio.load()
         Gdx.input.inputProcessor = this
         Gdx.input.setCatchKey(Input.Keys.BACK, true)
         if (dev != null) startDev(dev) else go(MenuScreen(this))
@@ -108,18 +114,26 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
             "play" -> go(PlayScreen(this, run, spec ?: IntroScreen.roll(run)))
             "intro" -> go(IntroScreen(this, run, spec))
             "over" -> {
-                run.score = 12340; run.dust = 87f; run.starsEaten = 64; run.bestCombo = 6
-                profile.addScore("ACE", 30000, 12, true, 1L)
-                profile.addScore("BOB", 9000, 6, false, 2L)
-                go(GameOverScreen(this, run))
+                val over = RunState(d.seed, "STAR22")
+                over.level = 9; over.score = 12340; over.dust = 87f; over.starsEaten = 64; over.bestCombo = 6
+                profile.addScore("ACE", 30000, 12, true, 1L, "MQQN99")
+                profile.addScore("BOB", 9000, 6, false, 2L, "STAR22")
+                go(GameOverScreen(this, over))
             }
             "skills" -> go(SkillScreen(this))
             "scores" -> {
                 val names = listOf("KIM", "ACE", "ZED", "BOB", "EVE", "SAM", "MAX")
-                for ((i, n) in names.withIndex()) profile.addScore(n, 42000 - i * 5300, 14 - i, i % 2 == 0, i.toLong())
+                for ((i, n) in names.withIndex()) profile.addScore(n, 42000 - i * 5300, 14 - i, i % 2 == 0, i.toLong(), if (i % 3 == 0) "STAR22" else "MQQN99")
+                profile.lastSeed = "STAR22"
                 go(ScoresScreen(this))
             }
             "help" -> go(HelpScreen(this))
+            "seed" -> {
+                profile.addScore("KIM", 8200, 7, false, 1L, "STAR22")
+                profile.addScore("ACE", 15100, 11, true, 2L, "STAR22")
+                profile.lastSeed = "STAR22"
+                go(SeedScreen(this))
+            }
             else -> go(MenuScreen(this))
         }
     }
@@ -136,6 +150,7 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
     override fun render() {
         // Dev runs step at a fixed rate so bot runs and screenshots are repeatable.
         val dt = if (dev != null) 1f / 60f else minOf(Gdx.graphics.deltaTime, 1f / 30f)
+        audio.update(dt)
         ScreenUtils.clear(0f, 0f, 0f, 1f)
         gfx.begin()
         screen?.render(dt)
@@ -163,6 +178,7 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
     }
 
     override fun dispose() {
+        audio.dispose()
         gfx.dispose()
     }
 
@@ -174,6 +190,10 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         if (keycode == Input.Keys.F11) {
             if (Gdx.graphics.isFullscreen) Gdx.graphics.setWindowedMode(1280, 720)
             else Gdx.graphics.setFullscreenMode(Gdx.graphics.displayMode)
+            return true
+        }
+        if (keycode == Input.Keys.M && screen?.typing != true) {
+            audio.toggleMusic()
             return true
         }
         return screen?.keyDown(keycode) ?: false

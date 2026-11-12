@@ -7,7 +7,9 @@ other, and the enemies never worked that out.** They take the plain route across
 well-timed wrap sends them trudging all the way back.
 
 This version turns that idea into a roguelite: every level rolls a random mix of rules, the
-difficulty keeps climbing, and a permanent skill tree carries you a little further each run.
+difficulty keeps climbing, every tenth level is a boss, and a permanent skill tree carries you a
+little further each run. Every run has a six-letter seed key, so two people can play the very same
+run and compare.
 
 Built with **Kotlin + [libGDX](https://libgdx.com/)**. Runs on desktop today; the Android module
 shares all of the game code.
@@ -41,6 +43,7 @@ Run the tests:
 | Dash *(skill)* | `SPACE` | Tap the DASH dial |
 | Nova pulse *(skill)* | `E` | Tap the NOVA dial |
 | Pause | `ESC` or `P` | Back button |
+| Music on/off | `M` | Buttons on the title screen |
 | Fullscreen | `F11` | |
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
@@ -52,7 +55,10 @@ Menus work with the mouse, a finger, or just arrows + `ENTER`.
    levels roll few rules, later levels roll more.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
 4. Eat the level's **quota** of stars to clear it. The quota grows every level.
-5. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
+5. Every tenth level is a **boss**.
+6. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
+
+It is endless: there is no last level, only how far you got.
 
 Within a level, enemies start slow and single, then keep arriving, speeding up and getting smarter
 the longer you take. Across levels, all of those numbers scale up too.
@@ -64,6 +70,7 @@ the longer you take. Across levels, all of those numbers scale up too.
 | **Classic** | The original. Everything lives on tiles; one tap, one step. Wraps on all four edges. |
 | **Glide** | Thrust and drift like a space shooter. Momentum carries you; wraps on all four edges. |
 | **Scroller** | A top-down scroller. Stars stream down from the top; you fly freely but only the sides wrap. |
+| **Orbit** | A solar system. A sun (or a black hole) sits in the middle and pulls on everything, stars ride their orbits, and you coast unless you burn. The field is bigger than the screen, so the camera follows you. From level 3. |
 
 ### Modifier rules
 
@@ -80,6 +87,10 @@ the longer you take. Across levels, all of those numbers scale up too.
 | Serpent | Every star grows your tail, and biting it hurts. | classic, glide |
 | Black Hole | A gravity well drags everything towards it. | glide, scroller |
 | Inversion | The edges are solid for you, and open for *them*. | all |
+| Deep Space | The field is four screens big and the camera follows you. Arrows on the rim point at off-screen stars. It still wraps. | classic, glide |
+| Lights Out | Pitch black apart from a small glow around you. Every star you eat lights up its patch for a few seconds. | all |
+
+Dark Nebula and Lights Out are never rolled together.
 
 ### Enemies
 
@@ -92,8 +103,28 @@ the longer you take. Across levels, all of those numbers scale up too.
 | `W` | Warper | The one that learned the trick: takes the wrapped route. | 4 |
 | `H` | Hive | Slow, but hatches fast, short-lived mites (`e`). | 6 |
 
+On classic (grid) levels the enemies are their letters, as in the original. Everywhere else they
+are drawn as creatures built from the same strokes: the E's arms are jaws that chomp faster as it
+closes in, the S slithers, the B rolls, the Z coils and springs, the W flaps, the H swells until a
+mite pops out.
+
 "Intelligence" is a single 0..1 dial per level. Dim enemies hesitate, wander and press their faces
 against walls; sharp ones lead their target, path around debris and turn on a dime.
+
+### Bosses
+
+Every tenth level is one enormous letter and a couple of minions, with no other twists. There are
+no guns in this game, so a boss is not shot down, it is out-eaten: **every star you eat hurts it**,
+and the level's quota is its health bar. Bosses cannot be stunned (they are slowed instead) and get
+faster as they are worn down.
+
+| Boss | Trick |
+|---|---|
+| The Devourer (`E`) | Lumbers after you, telegraphs, then lunges. Coughs up mites. |
+| The Leviathan (`S`) | A serpent whose whole trailing body is deadly. |
+| The Warden (`W`) | Knows the wrap, and calls a cross of rocks down on your tile. |
+
+They rotate: level 10, 20, 30, then round again, scaled up.
 
 ### Stars
 
@@ -116,10 +147,36 @@ Stardust buys permanent skills across three branches:
 - **Engine** - speed, a blink dash, and *Wrap Echo*: wrapping leaves an afterimage enemies chase.
 - **Maw** - a star magnet, longer combos, rarer stars, more stardust, and the Nova Pulse stun.
 
-There are two high-score boards. **Open** takes every run. **Mastered** only takes runs played with
-the complete tree, so everyone on it has identical kit and the only variable left is the player.
+There are three high-score boards:
+
+- **Open** takes every run.
+- **Mastered** only takes runs played with the complete tree, so everyone on it has identical kit
+  and the only variable left is the player.
+- **Seed** lists the runs on one seed key, so everyone on it played identical levels.
+
 The skills are deliberately utility rather than raw power - difficulty never stops scaling, so a
 full tree raises the ceiling without removing the need to actually dodge.
+
+### Seeds
+
+Every run has a seed key: six characters such as `STA-R22` (no `I`, `O`, `0` or `1`, so it can be
+read out loud). The key decides the whole run: which rules each level rolls, which enemies, the
+wall layouts, where the boss is. The same key deals the same run to anyone.
+
+- **PLAY** starts a run on a fresh random key. The key is shown in the briefing, in the HUD and on
+  the game-over screen, so a good run can be replayed or handed to a friend.
+- **SEEDED RUN** lets you type a key, take today's key (the same for everybody that day), or roll a
+  random one, and shows your best scores on it.
+- After a run, **SAME SEED** replays it.
+
+Scores are stored on the device only; comparing with a friend means comparing screens.
+
+### Sound
+
+All of it is synthesised by the game at start-up: pulse, triangle, saw and noise voices in
+`core/.../audio/Synth.kt`, with the effects and the six looping tunes written as code in
+`Sounds.kt`. There are no audio files in the repository. `./gradlew core:test` also drops every
+effect and tune as a WAV into `core/build/synth-preview/`, to listen to without launching the game.
 
 ## Project layout
 
@@ -127,7 +184,8 @@ full tree raises the ceiling without removing the need to actually dodge.
 core/      All game code. No platform dependencies beyond libGDX.
   sim/       The simulation: pure Kotlin, no rendering or input. Unit-tested and bot-testable.
   meta/      Skill tree, save data, high scores.
-  gfx/       Drawing toolkit and the world renderer.
+  gfx/       Drawing toolkit, the world renderer (with its camera) and the creature animations.
+  audio/     The chip synth, the tunes and effects, and playback.
   input/     Keyboard / touch -> InputState.
   ui/        Screens.
 lwjgl3/    Desktop launcher.
@@ -155,7 +213,13 @@ new enemy works in every mode without knowing about any of them. Add it to `Enem
 ### Adding a movement mode
 
 Add a `MoveKind`, implement `Movement` (how the player moves, how an enemy's desire becomes motion)
-and return it from `Movement.create`.
+and return it from `Movement.create`. If the mode wants a field bigger than the screen, set the
+spec's `width` and `height` in `LevelGen.build`; the camera takes care of the rest.
+
+### Adding a boss
+
+Subclass `BossType` in `core/.../sim/Bosses.kt`, add it to `Enemies.bosses`, and give it a shape in
+`Creatures.kt`.
 
 ## Android
 
@@ -184,11 +248,12 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 
 | Key | Meaning |
 |---|---|
-| `screen` | `menu`, `intro`, `play`, `over`, `skills`, `scores`, `help` |
+| `screen` | `menu`, `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help` |
 | `level` | Level number to scale difficulty for |
-| `move` | `GRID`, `GLIDE` or `SCROLL` |
-| `mods` | Comma-separated rule ids: `fog,walls,shy,decay,swarm,countdown,meteors,restless,tail,gravity,inversion` |
+| `move` | `GRID`, `GLIDE`, `SCROLL` or `ORBIT` |
+| `mods` | Comma-separated rule ids: `fog,walls,shy,decay,swarm,countdown,meteors,restless,tail,gravity,inversion,deep,lightsout` |
 | `roster` | Comma-separated enemy ids: `eater,stalker,bouncer,zoomer,warper,hive` |
+| `boss` | Jump into a boss level: `devourer`, `leviathan` or `warden` |
 | `skills=all` | Start with the full skill tree |
 | `dust` | Starting stardust |
 | `bot=1` | Let the autopilot play |
@@ -197,16 +262,10 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 
 ## Ideas not built yet
 
-- **Deep Space** - a field several screens wide with a follow camera. The wrap is still there, you
-  just have to remember where.
 - **Armed** - glide plus an actual gun: shots stun rather than kill, and stars are your ammo.
-- **Orbit** - everything circles a central sun; you thrust to change orbit instead of steering.
-- **Twins** - you steer two `o`s at once, mirrored. Either can eat, either can die.
-- **Lights Out** - the field is dark and each star you eat lights its surroundings for a while.
-- **Boss levels** - every tenth level, one very large letter.
-- **Daily seed** - everyone gets the same level sequence for a day; a natural fit for the Mastered
-  board and for online leaderboards.
-- **Sound** - there is none yet.
+- **Online boards** - seed keys already make runs comparable; the scores just are not shared yet.
+- **More bosses**, and boss levels that roll a modifier of their own.
+- **A launcher icon** for Android.
 
 ## Credits
 

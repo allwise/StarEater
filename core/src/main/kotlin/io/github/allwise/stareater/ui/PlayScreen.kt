@@ -3,6 +3,11 @@ package io.github.allwise.stareater.ui
 import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.StarEaterGame
+import io.github.allwise.stareater.audio.Audio
+import io.github.allwise.stareater.audio.Sfx
+import io.github.allwise.stareater.audio.Tune
+import io.github.allwise.stareater.sim.Fx
+import io.github.allwise.stareater.sim.StarType
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
@@ -21,7 +26,18 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     private val bot: Bot? = if (game.devBot) Bot() else null
     private var paused = false
 
+    private var lastTick = 0
+
     override fun show() {
+        game.audio.tune(
+            when {
+                spec.boss != null -> Tune.BOSS
+                spec.move == MoveKind.GRID -> Tune.CLASSIC
+                spec.move == MoveKind.GLIDE -> Tune.GLIDE
+                spec.move == MoveKind.SCROLL -> Tune.SCROLL
+                else -> Tune.ORBIT
+            },
+        )
         controls.dashEnabled = world.loadout.dash
         controls.novaEnabled = world.loadout.nova
         button(Gfx.W / 2f - 140f, 250f, 280f, 44f, "RESUME") { paused = false }
@@ -49,6 +65,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             bot?.drive(world, input)
             world.update(dt, input)
             input.clearEdges()
+            sounds()
             renderer.consume(world)
         }
         renderer.draw(world, if (paused) 0f else dt)
@@ -73,6 +90,41 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
     }
 
+    /** Gives this frame's events a voice. Must run before the renderer swallows them. */
+    private fun sounds() {
+        val audio = game.audio
+        for (e in world.fx) when (e) {
+            is Fx.StarEaten -> {
+                // The pickup blip climbs a scale with the combo.
+                audio.play(Sfx.EAT, Audio.comboPitch(e.combo))
+                if (e.type == StarType.NOVA) audio.play(Sfx.BLAST) else if (e.type.value >= 3) audio.play(Sfx.EAT_RARE)
+            }
+            is Fx.ShieldHit -> audio.play(Sfx.SHIELD)
+            is Fx.Revive -> audio.play(Sfx.REVIVE)
+            is Fx.Death -> {
+                audio.play(Sfx.DEATH)
+                audio.tune(null)
+            }
+            is Fx.Dash -> audio.play(Sfx.DASH)
+            is Fx.Nova -> audio.play(Sfx.BLAST, 1.2f, 0.7f)
+            is Fx.Wrap -> audio.play(Sfx.WRAP)
+            is Fx.EnemySpawn -> audio.play(Sfx.SPAWN)
+            is Fx.Stun -> audio.play(Sfx.STUN)
+            is Fx.Alert -> audio.play(Sfx.ALERT)
+            is Fx.MeteorWarn -> audio.play(Sfx.WARN)
+            is Fx.TimeUp -> audio.play(Sfx.UI_NO)
+            is Fx.BossHit -> audio.play(Sfx.BOSS_HIT)
+            is Fx.BossDead -> audio.play(Sfx.BOSS_DEAD)
+            is Fx.Cleared -> audio.play(Sfx.CLEAR)
+            is Fx.StarLost, is Fx.EnemyGone -> {}
+        }
+        // The countdown clock ticks out its last five seconds.
+        if (world.timeLeft in 0f..5f) {
+            val second = world.timeLeft.toInt()
+            if (second != lastTick) { lastTick = second; audio.play(Sfx.TICK) }
+        }
+    }
+
     /** The floating stick, shown only while a finger (or the mouse) is down. */
     private fun stick() {
         if (!controls.stickOn || paused) return
@@ -88,7 +140,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 val a = (world.phaseTime * 4f).coerceAtMost(1f)
                 g.glow(cx, cy, 300f, Pal.STAR, 0.25f * a)
                 g.text(g.huge, "CLEAR!", cx, cy + 40f, Pal.STAR, a, Align.center)
-                g.text(g.body, "+${50 * spec.number} BONUS", cx, cy - 28f, Pal.TEXT, a, Align.center)
+                g.text(g.body, "+${world.clearBonus} BONUS", cx, cy - 28f, Pal.TEXT, a, Align.center)
             }
             World.Phase.DEAD -> {
                 val a = ((world.phaseTime - 0.3f) * 3f).coerceIn(0f, 1f)
