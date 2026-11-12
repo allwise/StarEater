@@ -10,7 +10,6 @@ import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.LevelSpec
 import io.github.allwise.stareater.sim.Rules
 import io.github.allwise.stareater.sim.RunState
-import kotlin.random.Random
 
 /** The briefing before each level: which rules got rolled, who is hunting you, how many stars. */
 class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelSpec? = null) : Screen(game) {
@@ -83,6 +82,6 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
 
     companion object {
         /** Deterministic per run seed and level, so a level does not re-roll if you revisit its briefing. */
-        fun roll(run: RunState): LevelSpec = LevelGen.generate(run.level, Random(run.seed * 31 + run.level * 7919L), run.prevMove)
+        fun roll(run: RunState): LevelSpec = LevelGen.forRun(run)
     }
 }

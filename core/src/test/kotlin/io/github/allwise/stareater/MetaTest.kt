@@ -2,6 +2,8 @@ package io.github.allwise.stareater
 
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
+import io.github.allwise.stareater.meta.SeedKey
+import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.meta.Skill
 import kotlin.test.Test
 import kotlin.test.assertEquals
@@ -60,5 +62,49 @@ class MetaTest {
         assertEquals(listOf("ZED", "BOT"), b.topScores(true).map { it.name })
         assertEquals(2, b.rankFor(2000))
         assertEquals(0, b.rankFor(0))
+    }
+
+    @Test
+    fun seedKeysAreReadableAndStable() {
+        repeat(200) {
+            val key = SeedKey.random(kotlin.random.Random(it))
+            assertTrue(SeedKey.isValid(key), key)
+            assertEquals(key, SeedKey.normalise(key.lowercase()))
+        }
+        assertEquals("ABCDEF", SeedKey.normalise("abc-def"))
+        assertEquals("LQLQAB", SeedKey.normalise("1 0 I O a b"), "look-alikes map onto real symbols")
+        assertEquals(null, SeedKey.normalise("ABC"))
+        assertEquals("ABC-DEF", SeedKey.pretty("ABCDEF"))
+        assertEquals(SeedKey.daily(20_000), SeedKey.daily(20_000))
+        assertTrue(SeedKey.daily(20_000) != SeedKey.daily(20_001))
+    }
+
+    /** The whole point of a key: the same key always deals the same run. */
+    @Test
+    fun sameKeySameRun() {
+        fun deal(key: String): List<String> {
+            val run = SeedKey.newRun(key)
+            return (1..25).map { n ->
+                run.level = n
+                val spec = LevelGen.forRun(run)
+                run.prevMove = spec.move
+                "${spec.move} ${spec.modifiers} ${spec.roster.map { it.id }} ${spec.boss?.id}"
+            }
+        }
+        assertEquals(deal("STAR22"), deal("STAR22"))
+        assertTrue(deal("STAR22") != deal("STAR23"))
+    }
+
+    @Test
+    fun seedBoardsOnlyShowTheirOwnSeed() {
+        val p = Profile(MemoryStore())
+        p.addScore("AAA", 500, 3, false, 1L, "STAR22")
+        p.addScore("BBB", 900, 5, true, 2L, "STAR22")
+        p.addScore("CCC", 9000, 9, false, 3L, "MQQN99")
+        assertEquals(listOf("BBB", "AAA"), p.seedScores("STAR22").map { it.name })
+        assertEquals(2, p.seedRankFor("STAR22", 700))
+        assertEquals(1, p.seedRankFor("NEWKEY", 1))
+        val reloaded = Profile(p.let { MemoryStore() }.also { store -> p.copyInto(store) })
+        assertEquals(listOf("BBB", "AAA"), reloaded.seedScores("STAR22").map { it.name })
     }
 }

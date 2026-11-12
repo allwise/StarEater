@@ -43,6 +43,7 @@ class DevOptions(spec: String) {
     val move: MoveKind? = map["move"]?.let { m -> MoveKind.values().firstOrNull { it.name.equals(m, true) } }
     val mods: List<String>? = map["mods"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
     val roster: List<String>? = map["roster"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() }
+    val boss: String? = map["boss"]
     val bot: Boolean = map["bot"] == "1"
     val auto: Boolean = map["auto"] == "1"
     val allSkills: Boolean = map["skills"] == "all"
@@ -95,9 +96,11 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
                 for (s in Skill.values()) if (profile.buy(s)) bought = true
             }
         }
-        val run = RunState(d.seed)
+        val run = RunState(d.seed, "DEVRUN")
         run.level = d.level
-        val spec = if (d.move != null || d.mods != null || d.roster != null) {
+        val spec = if (d.boss != null) {
+            LevelGen.bossLevel(d.level, kotlin.random.Random(d.seed), Enemies.byId(d.boss), d.move)
+        } else if (d.move != null || d.mods != null || d.roster != null) {
             val roster = d.roster?.map { Enemies.byId(it) } ?: Enemies.roster.filter { it.minLevel <= d.level }
             LevelGen.build(d.level, d.move ?: MoveKind.GRID, d.mods ?: emptyList(), roster)
         } else null

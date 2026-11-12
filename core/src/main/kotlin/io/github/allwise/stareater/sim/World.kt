@@ -30,7 +30,12 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     val tail = ArrayList<Pt>()
     val walls = BooleanArray(cols * rows)
     val fx = ArrayList<Fx>()
+    val flares = ArrayList<Flare>()
     var decoy: Decoy? = null
+    var sun: Sun? = null
+
+    /** The big one, on boss levels. */
+    var boss: Enemy? = null
 
     // --- Knobs that rules turn -------------------------------------------------------------
     var hasWalls = false
@@ -58,6 +63,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     var iq = spec.iqBase
     var speedMul = 1f
     private var spawnTimer = spec.spawnInterval
+    private var spotX = 0.5f
+    private var spotY = 0.5f
 
     /** What the enemies are chasing: you, or your Wrap Echo. */
     val targetX: Float get() = decoy?.x ?: player.x
@@ -65,13 +72,21 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
     val comboWindow: Float get() = COMBO_WINDOW * loadout.comboTime
 
+    /** Score for clearing this level. Bosses pay out properly. */
+    val clearBonus: Int get() = if (spec.boss != null) 500 * (spec.number / LevelSpec.BOSS_EVERY) else 50 * spec.number
+
     init {
         if (spec.move == MoveKind.SCROLL) player.place(cols / 2 + 0.5f, 3.5f)
         else player.place(cols / 2 + 0.5f, rows / 2 + 0.5f)
         player.shields = loadout.shields
+        movement.setup(this)
         for (r in rules) r.setup(this)
         repeat(spec.starsOnField) { spawnStar(initial = true) }
         repeat(spec.enemyStart) { spawnEnemy(1.6f) }
+        spec.boss?.let {
+            pickSpawnSpot()
+            boss = spawnEnemyAt(it, spotX, spotY, 2.6f)
+        }
     }
 
     // ----------------------------------------------------------------------------------------
@@ -113,6 +128,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             r.update(this, dt)
             if (phase != Phase.PLAYING) return
         }
+        updateMeteors(dt)
+        if (phase != Phase.PLAYING) return
 
         decoy?.let {
             it.life -= dt
@@ -131,8 +148,13 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         if (phase == Phase.PLAYING && collected >= spec.quota) {
             phase = Phase.CLEARED
             phaseTime = 0f
-            run.score += 50 * spec.number
-            run.dust += (3 + spec.number) * loadout.dustMul
+            run.score += clearBonus
+            run.dust += (3 + spec.number) * loadout.dustMul * (if (spec.boss != null) 3f else 1f)
+            boss?.let {
+                fx += Fx.BossDead(it.x, it.y)
+                enemies.remove(it)
+                boss = null
+            }
             fx += Fx.Cleared()
         }
     }
@@ -264,6 +286,24 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             val y = if (initial) h * 0.35f + rng.nextFloat() * h * 0.65f else h + 0.6f
             s.place(x, y)
             if (s.type == StarType.COMET) s.vx = if (rng.nextBoolean()) 2.2f else -2.2f
+        } else if (spec.move == MoveKind.ORBIT && sun != null) {
+            // Stars ride circular orbits, slower the further out they are.
+            val centre = sun!!
+            val maxR = min(w, h) / 2f - 1.5f
+            var bestScore = -1f
+            for (attempt in 0 until 12) {
+                val r = 3f + rng.nextFloat() * (maxR - 3f)
+                val a = rng.nextFloat() * 6.2832f
+                val x = centre.x + kotlin.math.cos(a) * r
+                val y = centre.y + kotlin.math.sin(a) * r
+                var score = min(dist(x, y, player.x, player.y), 6f)
+                for (o in stars) score = min(score, dist(x, y, o.x, o.y) + 2f)
+                if (score > bestScore) { bestScore = score; s.orbitR = r; s.orbitA = a; s.place(x, y) }
+                if (score >= 4f) break
+            }
+            // Comets go round the wrong way, and faster.
+            val spin = if (s.type == StarType.COMET) -1.8f else 1f
+            s.orbitW = kotlin.math.sqrt(centre.gm / (s.orbitR * s.orbitR * s.orbitR)) * 0.55f * spin
         } else {
             var bx = 0.5f
             var by = 0.5f
@@ -321,6 +361,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             }
             val d = dist(s.x, s.y, p.x, p.y)
             if (loadout.magnet > 0f && s.lit && d < loadout.magnet && d > 0.01f) {
+                s.orbitR = 0f // the maw's pull beats the orbit
                 val pull = (3f + 9f * (1f - d / loadout.magnet)) * dt
                 s.x = Geo.wrap(s.x + dx(s.x, p.x, true) / d * pull, w)
                 s.y += dy(s.y, p.y, true) / d * pull
@@ -351,6 +392,10 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         run.dust += s.type.value * loadout.dustMul
         if (loadout.nova) player.novaCharge = min(NOVA_COST, player.novaCharge + 1)
         fx += Fx.StarEaten(s.x, s.y, s.type, points, combo)
+        boss?.let {
+            it.hurt = 0.45f
+            fx += Fx.BossHit(s.x, s.y, it.x, it.y)
+        }
         if (s.type == StarType.NOVA) shockwave(s.x, s.y, 6f, 2.5f)
         for (r in rules) r.onStarEaten(this, s)
     }
@@ -360,7 +405,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     // ----------------------------------------------------------------------------------------
 
     /** Speed of an enemy right now, in tiles per second. */
-    fun speedOf(e: Enemy): Float = spec.enemySpeed * speedMul * e.type.speed * e.pace * movement.enemySpeedFactor
+    fun speedOf(e: Enemy): Float =
+        spec.enemySpeed * speedMul * e.type.speed * e.pace * movement.enemySpeedFactor * (if (e.slow > 0f) 0.45f else 1f)
 
     /** The director: enemies start single and keep arriving until the level's cap. */
     private fun direct(dt: Float) {
@@ -379,6 +425,12 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             r -= t.weight
             if (r <= 0f) { type = t; break }
         }
+        pickSpawnSpot()
+        spawnEnemyAt(type, spotX, spotY, warmup)
+    }
+
+    /** Finds somewhere fair for an enemy to appear: off at a distance, but not half a galaxy away. */
+    private fun pickSpawnSpot() {
         var bx = 0.5f
         var by = 0.5f
         if (spec.move == MoveKind.SCROLL) {
@@ -399,13 +451,17 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
                 if (isWall(cx, cy)) continue
                 val x = cx + 0.5f
                 val y = cy + 0.5f
-                var score = dist(x, y, player.x, player.y)
+                val d = dist(x, y, player.x, player.y)
+                // Ideal is 9 to 15 tiles out; nearer is unfair, further is a long boring walk.
+                var score = if (d > 15f) 15f - (d - 15f) * 0.5f else d
                 if (enemies.any { dist(x, y, it.x, it.y) < 1.5f }) score *= 0.3f
+                sun?.let { if (dist(x, y, it.x, it.y) < it.radius + 2f) score = -1f }
                 if (score > best) { best = score; bx = x; by = y }
-                if (score >= 9f) break
+                if (d in 9f..15f && score > 0f) break
             }
         }
-        spawnEnemyAt(type, bx, by, warmup)
+        spotX = bx
+        spotY = by
     }
 
     fun spawnEnemyAt(type: EnemyType, x: Float, y: Float, warmup: Float): Enemy {
@@ -426,6 +482,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         while (i >= 0) {
             val e = enemies[i]
             e.tick(dt)
+            if (e.slow > 0f) e.slow -= dt
+            if (e.hurt > 0f) e.hurt -= dt
             if (e.life > 0f) {
                 e.life -= dt
                 if (e.life <= 0f) {
@@ -443,7 +501,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             } else {
                 e.type.think(this, e, dt)
                 movement.moveEnemy(this, e, dt)
-                if (dist(e.x, e.y, p.x, p.y) < TOUCH) hitPlayer()
+                if (dist(e.x, e.y, p.x, p.y) < PLAYER_RADIUS + e.radius) hitPlayer()
             }
             i--
         }
@@ -451,8 +509,49 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
     fun stun(e: Enemy, seconds: Float) {
         if (e.spawnT > 0f) return
+        if (e.type.boss) {
+            // Too big to stop; it only slows down.
+            if (e.slow <= 0f) fx += Fx.Stun(e.x, e.y)
+            e.slow = max(e.slow, seconds)
+            return
+        }
         if (e.stun <= 0f) fx += Fx.Stun(e.x, e.y)
         e.stun = max(e.stun, seconds)
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Meteors
+    // ----------------------------------------------------------------------------------------
+
+    /** Schedules a rock to sweep a row or column after a warning. */
+    fun callMeteor(horizontal: Boolean, line: Int, dir: Int = if (rng.nextBoolean()) 1 else -1) {
+        val span = if (horizontal) w else h
+        val wrapped = Math.floorMod(line, if (horizontal) rows else cols)
+        meteors += Meteor(horizontal, wrapped, dir, METEOR_WARN, if (dir > 0) -1f else span + 1f)
+        fx += Fx.MeteorWarn()
+    }
+
+    private fun updateMeteors(dt: Float) {
+        var i = meteors.size - 1
+        while (i >= 0) {
+            val m = meteors[i]
+            if (m.warn > 0f) {
+                m.warn -= dt
+            } else {
+                m.pos += m.dir * METEOR_SPEED * dt
+                val span = if (m.horizontal) w else h
+                if (m.pos < -1.5f || m.pos > span + 1.5f) {
+                    meteors.removeAt(i)
+                } else {
+                    if (hypot(player.x - m.x, player.y - m.y) < 0.75f) hitPlayer()
+                    // Rocks are not picky about who they flatten.
+                    for (e in enemies) {
+                        if (e.active && !e.type.boss && hypot(e.x - m.x, e.y - m.y) < 0.75f) stun(e, 2.5f)
+                    }
+                }
+            }
+            i--
+        }
     }
 
     /** Stuns every enemy within [radius] of a point. */
@@ -520,6 +619,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             if (nx < 0f || nx >= w) { if (!playerWrapX) break; nx = Geo.wrap(nx, w); wrapped = true }
             if (ny < 0f || ny >= h) { if (!playerWrapY) break; ny = Geo.wrap(ny, h); wrapped = true }
             if (hasWalls && boxHitsWall(nx, ny, PLAYER_RADIUS * 0.85f)) break
+            val centre = sun
+            if (centre != null && hypot(nx - centre.x, ny - centre.y) < centre.radius + 0.4f) break
             p.x = nx; p.y = ny
             if (loadout.dashStun) for (e in enemies) if (dist(e.x, e.y, nx, ny) < 1.1f) stun(e, 2f)
             // Hoover up anything the dash passes through.
@@ -560,6 +661,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         const val ECHO_TIME = 2.4f
         const val ECHO_COOLDOWN = 6f
         const val SHIELD_REGEN_TIME = 25f
+        const val METEOR_WARN = 1.3f
+        const val METEOR_SPEED = 15f
         private val DIRS = Dir.values()
     }
 }

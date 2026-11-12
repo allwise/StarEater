@@ -44,8 +44,14 @@ class Bot {
         var d = 0f
         for (e in w.enemies) {
             if (e.stun > 0.4f || e.spawnT > 0.4f) continue
-            val dist = w.dist(e.x, e.y, x, y)
+            val dist = (w.dist(e.x, e.y, x, y) - (e.radius - 0.3f)).coerceAtLeast(0f)
             d += 1f / (dist * dist + 0.05f)
+            val trail = e.trail ?: continue
+            for (t in trail) if (w.dist(t.x, t.y, x, y) < 1.2f) d += 3f
+        }
+        w.sun?.let {
+            val dist = (w.dist(it.x, it.y, x, y) - it.radius).coerceAtLeast(0f)
+            d += 3f / (dist * dist + 0.05f)
         }
         for (m in w.meteors) {
             val sameLine = if (m.horizontal) floor(y).toInt() == m.line else floor(x).toInt() == m.line

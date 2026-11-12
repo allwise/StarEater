@@ -22,11 +22,15 @@ abstract class Movement(val kind: MoveKind) {
     abstract fun moveEnemy(w: World, e: Enemy, dt: Float)
     open fun updateWorld(w: World, dt: Float) {}
 
+    /** Called once when the level is built, before the rules set themselves up. */
+    open fun setup(w: World) {}
+
     companion object {
         fun create(kind: MoveKind): Movement = when (kind) {
             MoveKind.GRID -> GridMovement()
             MoveKind.GLIDE -> GlideMovement()
             MoveKind.SCROLL -> ScrollMovement()
+            MoveKind.ORBIT -> OrbitMovement()
         }
     }
 }
@@ -299,5 +303,87 @@ class ScrollMovement : ContinuousMovement(MoveKind.SCROLL, accel = 70f, drag = 7
             starTimer = (w.h / speed) / w.spec.starsOnField * (0.6f + 0.8f * w.rng.nextFloat())
             w.spawnStar()
         }
+    }
+}
+
+/**
+ * Mode 4: a solar system. A sun (or a black hole) sits in the middle and pulls on everything; stars
+ * ride their orbits; you coast unless you burn. Fall in and it costs you.
+ */
+class OrbitMovement : ContinuousMovement(MoveKind.ORBIT, accel = 22f, drag = 0f, maxSpeed = 11f) {
+    override val enemySpeedFactor = 1.1f
+
+    override fun setup(w: World) {
+        val black = w.rng.nextFloat() < 0.35f
+        val sun = Sun(w.w / 2f, w.h / 2f, if (black) 1.0f else 1.3f, if (black) GM * 1.35f else GM, black)
+        w.sun = sun
+        // Start the player in a tidy circular orbit, so doing nothing is survivable.
+        val p = w.player
+        p.place(sun.x + START_RADIUS, sun.y)
+        p.vx = 0f
+        p.vy = sqrt(sun.gm / START_RADIUS)
+        p.faceX = 0f; p.faceY = 1f
+    }
+
+    override fun updatePlayer(w: World, input: InputState, dt: Float) {
+        val sun = w.sun
+        val p = w.player
+        if (sun != null) {
+            val dx = sun.x - p.x
+            val dy = sun.y - p.y
+            val d = hypot(dx, dy)
+            if (d > 0.01f) {
+                val a = sun.gm / max(d * d, 1f)
+                p.vx += dx / d * a * dt
+                p.vy += dy / d * a * dt
+            }
+        }
+        super.updatePlayer(w, input, dt)
+        if (sun != null) {
+            val dx = p.x - sun.x
+            val dy = p.y - sun.y
+            val d = hypot(dx, dy)
+            val limit = sun.radius + 0.3f
+            if (d < limit) {
+                val ux = if (d > 0.01f) dx / d else 1f
+                val uy = if (d > 0.01f) dy / d else 0f
+                w.hitPlayer()
+                // Spat back out, whether or not it hurt.
+                p.x = sun.x + ux * (limit + 0.05f)
+                p.y = sun.y + uy * (limit + 0.05f)
+                p.vx = ux * 9f; p.vy = uy * 9f
+            }
+        }
+    }
+
+    override fun updateWorld(w: World, dt: Float) {
+        val sun = w.sun ?: return
+        for (s in w.stars) {
+            if (s.orbitR <= 0f) continue
+            s.orbitA += s.orbitW * dt
+            s.x = Geo.wrap(sun.x + cos(s.orbitA) * s.orbitR, w.w)
+            s.y = Geo.wrap(sun.y + sin(s.orbitA) * s.orbitR, w.h)
+        }
+        for (e in w.enemies) {
+            if (!e.active) continue
+            val dx = sun.x - e.x
+            val dy = sun.y - e.y
+            val d = hypot(dx, dy)
+            if (d < 0.01f) continue
+            val a = sun.gm * 0.3f / max(d * d, 1f)
+            e.vx += dx / d * a * dt
+            e.vy += dy / d * a * dt
+            if (d < sun.radius + e.radius) {
+                // Lure them in: the sun does not take sides.
+                w.stun(e, 2.5f)
+                e.x = sun.x - dx / d * (sun.radius + e.radius + 0.3f)
+                e.y = sun.y - dy / d * (sun.radius + e.radius + 0.3f)
+            }
+        }
+    }
+
+    companion object {
+        const val GM = 110f
+        const val START_RADIUS = 6.5f
     }
 }

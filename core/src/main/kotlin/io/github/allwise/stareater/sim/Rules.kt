@@ -27,6 +27,8 @@ class RuleInfo(
     val moves: Set<MoveKind>,
     /** Adjusts the level's numbers before the world is built. */
     val tune: (LevelSpec) -> Unit = {},
+    /** Ids of rules this one must never be combined with. */
+    val conflicts: Set<String> = emptySet(),
     val create: () -> Rule,
 )
 
@@ -36,7 +38,7 @@ object Rules {
     private val FLOATY = setOf(MoveKind.GLIDE, MoveKind.SCROLL)
 
     val all: List<RuleInfo> = listOf(
-        RuleInfo("fog", "DARK NEBULA", "You only see what is close. Stars still glimmer.", 2, ALL_MOVES) { FogRule() },
+        RuleInfo("fog", "DARK NEBULA", "You only see what is close. Stars still glimmer.", 2, ALL_MOVES, conflicts = setOf("lightsout")) { FogRule() },
         RuleInfo("walls", "DEBRIS FIELD", "Wreckage blocks the way - for them too.", 2, FLAT) { WallsRule() },
         RuleInfo("shy", "SHY STARS", "Stars drift away when you get close.", 2, FLAT) { ShyStarsRule() },
         RuleInfo("decay", "FADING LIGHT", "Stars burn out if you dawdle.", 2, FLAT) { DecayRule() },
@@ -55,6 +57,17 @@ object Rules {
         RuleInfo("tail", "SERPENT", "Every star grows your tail. Do not bite it.", 4, FLAT) { TailRule() },
         RuleInfo("gravity", "BLACK HOLE", "Something heavy is pulling everything in.", 4, FLOATY) { GravityRule() },
         RuleInfo("inversion", "INVERSION", "The edges are solid for you - and open for them.", 5, ALL_MOVES) { InversionRule() },
+        RuleInfo(
+            "deep", "DEEP SPACE", "A field four screens big. It still wraps - somewhere out there.", 3, FLAT,
+            tune = {
+                it.width *= 2
+                it.height *= 2
+                it.starsOnField += 3
+                it.enemyStart += 1
+                it.enemyMax = (it.enemyMax * 1.4f).toInt() + 1
+            },
+        ) { object : Rule() {} },
+        RuleInfo("lightsout", "LIGHTS OUT", "Pitch black. Every star you eat lights its patch for a while.", 4, ALL_MOVES, conflicts = setOf("fog")) { LightsOutRule() },
     )
 
     fun byId(id: String): RuleInfo = all.first { it.id == id }
@@ -68,12 +81,13 @@ class FogRule : Rule() {
 
 class WallsRule : Rule() {
     override fun setup(w: World) {
-        val target = min(70, 30 + w.spec.number * 2)
+        // Same density whatever the field size.
+        val target = min(70, 30 + w.spec.number * 2) * (w.cols * w.rows) / (LevelSpec.FIELD_W * LevelSpec.FIELD_H)
         repeat(25) {
             w.walls.fill(false)
             var placed = 0
             var guard = 0
-            while (placed < target && guard++ < 400) {
+            while (placed < target && guard++ < 1600) {
                 val horizontal = w.rng.nextBoolean()
                 val len = 2 + w.rng.nextInt(4)
                 val sx = w.rng.nextInt(w.cols)
@@ -185,39 +199,38 @@ class MeteorRule : Rule() {
 
     override fun update(w: World, dt: Float) {
         timer -= dt
-        if (timer <= 0f) {
-            timer = max(1.3f, 4.2f - 0.14f * w.spec.number) * (0.7f + 0.6f * w.rng.nextFloat())
-            val horizontal = w.rng.nextBoolean()
-            val dir = if (w.rng.nextBoolean()) 1 else -1
-            val line = w.rng.nextInt(if (horizontal) w.rows else w.cols)
-            val span = if (horizontal) w.w else w.h
-            w.meteors += Meteor(horizontal, line, dir, WARN, if (dir > 0) -1f else span + 1f)
-        }
-        var i = w.meteors.size - 1
+        if (timer > 0f) return
+        timer = max(1.3f, 4.2f - 0.14f * w.spec.number) * (0.7f + 0.6f * w.rng.nextFloat())
+        // Aim somewhere near the player, so rocks in a huge field are never somebody else's problem.
+        val horizontal = w.rng.nextBoolean()
+        val centre = if (horizontal) w.player.y.toInt() else w.player.x.toInt()
+        val spread = if (horizontal) LevelSpec.FIELD_H / 2 else LevelSpec.FIELD_W / 2
+        w.callMeteor(horizontal, centre + w.rng.nextInt(-spread, spread + 1))
+    }
+}
+
+/** Darkness, except around you and wherever you last ate. */
+class LightsOutRule : Rule() {
+    override fun setup(w: World) {
+        w.fogRadius = 2.6f
+        // A parting look at the field before the lights go.
+        w.flares += Flare(w.player.x, w.player.y, 8f, 5f, 5f)
+    }
+
+    override fun update(w: World, dt: Float) {
+        var i = w.flares.size - 1
         while (i >= 0) {
-            val m = w.meteors[i]
-            if (m.warn > 0f) {
-                m.warn -= dt
-            } else {
-                m.pos += m.dir * SPEED * dt
-                val span = if (m.horizontal) w.w else w.h
-                if (m.pos < -1.5f || m.pos > span + 1.5f) {
-                    w.meteors.removeAt(i)
-                } else {
-                    if (hypot(w.player.x - m.x, w.player.y - m.y) < 0.75f) w.hitPlayer()
-                    // Rocks are not picky about who they flatten.
-                    for (e in w.enemies) {
-                        if (e.active && hypot(e.x - m.x, e.y - m.y) < 0.75f) w.stun(e, 2.5f)
-                    }
-                }
-            }
+            val f = w.flares[i]
+            f.life -= dt
+            if (w.spec.move == MoveKind.SCROLL) f.y -= w.spec.scrollSpeed * dt
+            if (f.life <= 0f) w.flares.removeAt(i)
             i--
         }
     }
 
-    private companion object {
-        const val WARN = 1.3f
-        const val SPEED = 15f
+    override fun onStarEaten(w: World, s: Star) {
+        val radius = if (s.type == StarType.NOVA) 11f else 5.5f + 0.4f * s.type.value
+        w.flares += Flare(s.x, s.y, radius, 7f, 7f)
     }
 }
 

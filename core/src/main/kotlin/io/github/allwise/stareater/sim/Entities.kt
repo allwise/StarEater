@@ -75,6 +75,23 @@ class Enemy(val type: EnemyType) : Body() {
     var seed = 0f
     var dead = false
 
+    /** Bosses cannot be stunned; they are slowed for this long instead. */
+    var slow = 0f
+
+    /** Counts down after a boss takes a hit (render only). */
+    var hurt = 0f
+
+    /** Body segments trailing behind the head, for enemies that have a body. */
+    var trail: ArrayList<Pt>? = null
+    var trailX = 0f
+    var trailY = 0f
+
+    /** Facing and animation clock. Owned by the renderer; the sim never reads them. */
+    var heading = 0f
+    var animT = 0f
+
+    val radius: Float get() = type.radius
+
     val active: Boolean get() = spawnT <= 0f && stun <= 0f && !dead
 }
 
@@ -91,6 +108,11 @@ class Star(val type: StarType) : Body() {
 
     /** Seconds until the star fizzles out, or 0 for "stays put". */
     var ttl = 0f
+
+    /** In orbit mode: radius, angle and angular speed around the centre. Radius 0 means "not orbiting". */
+    var orbitR = 0f
+    var orbitA = 0f
+    var orbitW = 0f
 
     /** Pulsars can only be eaten while they are lit. */
     val lit: Boolean get() = type != StarType.PULSAR || (age % PULSAR_PERIOD) < PULSAR_ON
@@ -110,6 +132,12 @@ class Meteor(val horizontal: Boolean, val line: Int, val dir: Int, var warn: Flo
 /** A black hole. */
 class Well(var x: Float, var y: Float, val pull: Float)
 
+/** The thing in the middle of an orbit level: a sun, or a black hole. */
+class Sun(val x: Float, val y: Float, val radius: Float, val gm: Float, val blackHole: Boolean)
+
+/** A patch of light left behind in a Lights Out level. */
+class Flare(var x: Float, var y: Float, val radius: Float, var life: Float, val maxLife: Float)
+
 /** The Wrap Echo afterimage that enemies chase instead of you. */
 class Decoy(val x: Float, val y: Float, var life: Float)
 
@@ -128,6 +156,10 @@ sealed class Fx {
     class EnemySpawn(val x: Float, val y: Float) : Fx()
     class EnemyGone(val x: Float, val y: Float) : Fx()
     class Stun(val x: Float, val y: Float) : Fx()
+    class Alert(val x: Float, val y: Float) : Fx()
+    class MeteorWarn : Fx()
+    class BossHit(val x: Float, val y: Float, val bossX: Float, val bossY: Float) : Fx()
+    class BossDead(val x: Float, val y: Float) : Fx()
     class TimeUp : Fx()
     class Cleared : Fx()
 }
@@ -150,7 +182,7 @@ class Loadout(
 )
 
 /** State that survives from level to level within one run. */
-class RunState(val seed: Long) {
+class RunState(val seed: Long, val key: String = "") {
     var level = 1
     var score = 0
     var dust = 0f

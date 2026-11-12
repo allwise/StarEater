@@ -28,6 +28,12 @@ abstract class EnemyType(
     /** False for things that are only ever spawned by other enemies. */
     val inRoster: Boolean = true,
 ) {
+    /** Collision radius in tiles. */
+    open val radius: Float get() = 0.3f
+
+    /** Bosses shrug off stuns (they are slowed instead) and are what a boss level is about. */
+    open val boss: Boolean get() = false
+
     open fun init(w: World, e: Enemy) {}
 
     abstract fun think(w: World, e: Enemy, dt: Float)
@@ -122,6 +128,7 @@ object Zoomer : EnemyType("zoomer", 'Z', "ZOOMER", "Lines you up, winds up, then
                 }
                 e.state = AIM
                 e.timer = 0.75f - 0.3f * w.iq
+                w.fx += Fx.Alert(e.x, e.y)
             }
             AIM -> {
                 e.pace = 0f
@@ -198,10 +205,11 @@ object Mite : EnemyType("mite", 'e', "MITE", "Fast, dumb, and gone in a few seco
 
 object Enemies {
     val all: List<EnemyType> = listOf(Eater, Stalker, Bouncer, Zoomer, Warper, Hive, Mite)
+    val bosses: List<EnemyType> = listOf(Devourer, Leviathan, Warden)
     val roster: List<EnemyType> = all.filter { it.inRoster }
 
     /** Types that actually hunt you. Every level gets at least one. */
     val hunters: List<EnemyType> = listOf(Eater, Stalker, Warper)
 
-    fun byId(id: String): EnemyType = all.first { it.id == id }
+    fun byId(id: String): EnemyType = (all + bosses).first { it.id == id }
 }

@@ -13,8 +13,12 @@ class LevelSpec(
     val modifiers: List<String>,
     val roster: List<EnemyType>,
 ) {
-    val width = FIELD_W
-    val height = FIELD_H
+    /** Field size in tiles. Bigger than the view means the camera follows the player. */
+    var width = FIELD_W
+    var height = FIELD_H
+
+    /** Set on boss levels: the big one. The quota is then its health. */
+    var boss: EnemyType? = null
 
     var quota = 8
     var starsOnField = 2
@@ -41,6 +45,7 @@ class LevelSpec(
         const val FIELD_W = 30
         const val FIELD_H = 15
         const val MAX_RULES = 5
+        const val BOSS_EVERY = 10
     }
 }
 
@@ -51,10 +56,11 @@ object LevelGen {
      */
     fun generate(n: Int, rng: Random, prevMove: MoveKind? = null): LevelSpec {
         if (n <= 1) return build(1, MoveKind.GRID, emptyList(), listOf(Eater, Stalker))
+        if (n % LevelSpec.BOSS_EVERY == 0) return bossLevel(n, rng)
 
-        // Movement: any mode, but lean away from repeating the previous one.
-        val moves = MoveKind.values()
-        val move = pick(rng, moves.toList()) { if (it == prevMove) 0.35f else 1f }
+        // Movement: any unlocked mode, but lean away from repeating the previous one.
+        val moves = MoveKind.values().filter { it != MoveKind.ORBIT || n >= 3 }
+        val move = pick(rng, moves) { if (it == prevMove) 0.35f else 1f }
 
         val maxRules = when {
             n <= 3 -> 2
@@ -70,7 +76,11 @@ object LevelGen {
         val wanted = minRules + rng.nextInt(maxRules - minRules + 1) - 1 // minus the movement rule
         val pool = Rules.all.filter { it.minLevel <= n && move in it.moves }.toMutableList()
         val mods = ArrayList<String>()
-        while (mods.size < wanted && pool.isNotEmpty()) mods += pool.removeAt(rng.nextInt(pool.size)).id
+        while (mods.size < wanted && pool.isNotEmpty()) {
+            val chosen = pool.removeAt(rng.nextInt(pool.size))
+            mods += chosen.id
+            pool.removeAll { it.id in chosen.conflicts || chosen.id in it.conflicts }
+        }
 
         val available = Enemies.roster.filter { it.minLevel <= n }.toMutableList()
         val rosterSize = 1 + rng.nextInt(min(4, 1 + n / 2))
@@ -82,12 +92,42 @@ object LevelGen {
         return build(n, move, mods, roster.sortedBy { Enemies.all.indexOf(it) })
     }
 
+    /**
+     * The level a run is currently on. Depends only on the run's seed and level number, so every
+     * player on the same seed key is dealt exactly the same sequence.
+     */
+    fun forRun(run: RunState): LevelSpec = generate(run.level, Random(run.seed * 31 + run.level * 7919L), run.prevMove)
+
+    /** Every tenth level: one enormous letter, a couple of minions, and no other twists. */
+    fun bossLevel(n: Int, rng: Random, boss: EnemyType? = null, move: MoveKind? = null): LevelSpec {
+        val tier = n / LevelSpec.BOSS_EVERY
+        val who = boss ?: Enemies.bosses[(tier - 1).coerceAtLeast(0) % Enemies.bosses.size]
+        val how = move ?: if (rng.nextBoolean()) MoveKind.GRID else MoveKind.GLIDE
+        val s = build(n, how, emptyList(), listOf(if (who === Warden) Stalker else Eater))
+        s.boss = who
+        s.quota = min(40, 18 + n / 5)
+        s.starsOnField = 3
+        s.enemyStart = 1
+        s.enemyMax = min(5, 2 + n / 20)
+        s.spawnInterval = 10f
+        return s
+    }
+
     /** Builds a spec for an explicit rule set, with numbers scaled for level [n]. */
     fun build(n: Int, move: MoveKind, mods: List<String>, roster: List<EnemyType>): LevelSpec {
         val s = LevelSpec(n, move, mods, roster)
         val k = n - 1
         s.quota = min(60, 8 + 2 * k)
-        s.starsOnField = if (move == MoveKind.SCROLL) 5 + min(3, n / 5) else 2 + min(3, n / 4)
+        s.starsOnField = when (move) {
+            MoveKind.SCROLL -> 5 + min(3, n / 5)
+            MoveKind.ORBIT -> 4 + min(3, n / 4)
+            else -> 2 + min(3, n / 4)
+        }
+        if (move == MoveKind.ORBIT) {
+            // A solar system needs room: bigger than the screen, so the camera follows.
+            s.width = 40
+            s.height = 26
+        }
         s.enemyStart = 1 + min(3, k / 4)
         s.enemyMax = min(14, 3 + (k * 0.7f).toInt())
         s.spawnInterval = max(3.5f, 11f - 0.5f * k)
