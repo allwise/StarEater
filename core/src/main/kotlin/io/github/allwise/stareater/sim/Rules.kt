@@ -55,7 +55,7 @@ object Rules {
         RuleInfo("meteors", "METEOR SHOWER", "Rows and columns flash, then get flattened.", 3, ALL_MOVES) { MeteorRule() },
         RuleInfo("restless", "RESTLESS", "No brakes. You can steer, you cannot stop.", 3, FLAT) { RestlessRule() },
         RuleInfo("tail", "SERPENT", "Every star grows your tail. Do not bite it.", 4, FLAT) { TailRule() },
-        RuleInfo("gravity", "BLACK HOLE", "Something heavy is pulling everything in.", 4, FLOATY) { GravityRule() },
+        RuleInfo("gravity", "GRAVITY WELLS", "Suns pull you off course. Black holes swallow you.", 4, FLOATY) { GravityRule() },
         RuleInfo("inversion", "INVERSION", "The edges are solid for you - and open for them.", 5, ALL_MOVES) { InversionRule() },
         RuleInfo(
             "deep", "DEEP SPACE", "Four screens of field. It still wraps - somewhere.", 3, FLAT,
@@ -141,6 +141,10 @@ class WallsRule : Rule() {
 }
 
 class ShyStarsRule : Rule() {
+    override fun setup(w: World) {
+        w.shyStars = true
+    }
+
     override fun update(w: World, dt: Float) {
         val p = w.player
         for (s in w.stars) {
@@ -148,7 +152,7 @@ class ShyStarsRule : Rule() {
             val dy = w.dy(p.y, s.y, true)
             val d = hypot(dx, dy)
             if (d > RANGE || d < 0.01f) continue
-            val step = SPEED * (1f - d / RANGE * 0.6f) * dt
+            val step = flee(d) * dt
             val nx = Geo.wrap(s.x + dx / d * step, w.w)
             val ny = (s.y + dy / d * step).let { if (w.wrapY) Geo.wrap(it, w.h) else it.coerceIn(0.5f, w.h - 0.5f) }
             if (w.isWallAt(nx, ny)) continue
@@ -156,9 +160,12 @@ class ShyStarsRule : Rule() {
         }
     }
 
-    private companion object {
+    companion object {
         const val RANGE = 4.2f
-        const val SPEED = 4.2f
+        private const val SPEED = 4.2f
+
+        /** How fast a star backs away from a player [d] tiles off, in tiles per second. */
+        fun flee(d: Float): Float = if (d >= RANGE) 0f else SPEED * (1f - d / RANGE * 0.6f)
     }
 }
 
@@ -279,20 +286,34 @@ class TailRule : Rule() {
     }
 }
 
+/**
+ * Gravity wells: suns, which only pull, and black holes, which pull and kill. In the scroller they
+ * drift down the screen one after another, up to three of them; elsewhere they sit still.
+ */
 class GravityRule : Rule() {
     override fun setup(w: World) {
-        val count = if (w.spec.number >= 9) 2 else 1
-        repeat(count) {
+        val n = w.spec.number
+        val scrolling = w.spec.move == MoveKind.SCROLL
+        val count = if (scrolling) 1 + (if (n >= 8) 1 else 0) + (if (n >= 14) 1 else 0) else if (n >= 9) 2 else 1
+        // Never a whole sky of black holes: one at most, two once things have got properly late.
+        var holesLeft = if (n >= 16) 2 else 1
+        // The scroller's wells come round on a loop; spacing them evenly along it keeps them apart for good.
+        val lap = w.h + 2 * MARGIN
+        repeat(count) { i ->
             var x = 0f
             var y = 0f
             for (attempt in 0 until 40) {
                 x = 3f + w.rng.nextFloat() * (w.w - 6f)
-                y = 3f + w.rng.nextFloat() * (w.h - 6f)
+                y = if (scrolling) w.h * 0.75f + i * lap / count else 3f + w.rng.nextFloat() * (w.h - 6f)
                 val farFromPlayer = hypot(x - w.player.x, y - w.player.y) > 7f
                 val farFromOthers = w.wells.all { hypot(x - it.x, y - it.y) > 8f }
                 if (farFromPlayer && farFromOthers) break
             }
-            w.wells += Well(x, y, if (w.spec.move == MoveKind.SCROLL) 34f else 22f)
+            val hole = holesLeft > 0 && w.rng.nextFloat() < 0.3f
+            if (hole) holesLeft--
+            // Dwarfs and middling suns early on; the giants turn up from level 8.
+            val stage = if (hole) Gravity.HOLE else 1 + w.rng.nextInt(min(3, 1 + n / 4))
+            w.wells += Well(x, y, stage, (if (scrolling) 34f else 22f) * Gravity.factor(stage))
         }
     }
 
@@ -301,8 +322,8 @@ class GravityRule : Rule() {
         for (well in w.wells) {
             if (w.spec.move == MoveKind.SCROLL) {
                 well.y -= w.spec.scrollSpeed * 0.6f * dt
-                if (well.y < -3f) {
-                    well.y = w.h + 3f
+                if (well.y < -MARGIN) {
+                    well.y += w.h + 2 * MARGIN
                     well.x = 3f + w.rng.nextFloat() * (w.w - 6f)
                 }
             }
@@ -314,11 +335,15 @@ class GravityRule : Rule() {
                 p.vx += dx / d * a * dt
                 p.vy += dy / d * a * dt
             }
-            if (d < 0.6f && p.invuln <= 0f) {
-                w.hitPlayer()
-                // Spit the player back out so they are not stuck in the middle.
+            // A sun you can fly straight through. Past a black hole's horizon there is no coming back
+            // (short of a Second Wind, which gets thrown clear).
+            if (well.blackHole && d < well.radius) {
+                w.hitPlayer(fatal = true)
                 val ux = if (d > 0.01f) -dx / d else 1f
                 val uy = if (d > 0.01f) -dy / d else 0f
+                p.x = Geo.wrap(well.x + ux * (well.radius + 0.5f), w.w)
+                p.y = (well.y + uy * (well.radius + 0.5f)).coerceIn(0.3f, w.h - 0.3f)
+                p.px = p.x; p.py = p.y
                 p.vx = ux * 9f; p.vy = uy * 9f
             }
             for (e in w.enemies) {
@@ -337,6 +362,9 @@ class GravityRule : Rule() {
 
     private companion object {
         const val REACH = 9f
+
+        /** How far off the top and bottom a scrolling well goes before it comes round again. */
+        const val MARGIN = 3f
     }
 }
 

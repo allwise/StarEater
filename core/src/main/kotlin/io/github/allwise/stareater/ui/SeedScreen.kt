@@ -7,6 +7,7 @@ import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.audio.Tune
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
+import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 
 /**
@@ -20,23 +21,38 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
     /** Keyboard focus is either on the key (type away) or on the buttons (arrows and ENTER). */
     private var onButtons = false
 
+    /** Set by recalling a saved level: play starts there, in that mode, until the key is changed. */
+    private var recalled: SavedLevel? = null
+    private lateinit var slots: SavedSlots
+    private lateinit var playButton: Button
+
     override val typing: Boolean get() = !onButtons
 
     override fun show() {
         game.audio.tune(Tune.MENU)
         set(game.profile.lastSeed.ifEmpty { SeedKey.dailyNow() })
         button(16f, Gfx.H - 50f, 110f, 36f, "BACK") { back() }.small = true
-        val y = 196f
-        button(Gfx.W / 2f - 330f, y, 210f, 44f, "PLAY THIS SEED") { play() }.accent = Pal.GOLD
+        val y = 228f
+        playButton = button(Gfx.W / 2f - 330f, y, 210f, 44f, "PLAY THIS SEED") { play() }
+        playButton.accent = Pal.GOLD
         button(Gfx.W / 2f - 105f, y, 210f, 44f, "TODAY'S SEED") { set(SeedKey.dailyNow()) }
         button(Gfx.W / 2f + 120f, y, 210f, 44f, "RANDOM") { set(SeedKey.random()) }
+        // Tap a slot to bring its level back; hold one to store whatever is showing.
+        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { SavedLevel(current(), startAt(), recalled?.arcade == true) }) {
+            set(it.key)
+            recalled = it
+        }
         focus = 1
     }
 
     private fun set(k: String) {
         k.toCharArray().copyInto(key)
         slot = 0
+        recalled = null
     }
+
+    /** The level a run from this screen begins on. */
+    private fun startAt(): Int = recalled?.takeIf { it.key == current() }?.level ?: game.profile.startLevel
 
     private fun current(): String = String(key)
 
@@ -44,7 +60,7 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         val k = current()
         game.profile.lastSeed = k
         game.profile.save()
-        game.go(IntroScreen(game, SeedKey.newRun(k)))
+        game.go(IntroScreen(game, SeedKey.newRun(k, recalled?.takeIf { it.key == k }?.arcade == true, startAt())))
     }
 
     override fun back() = game.go(MenuScreen(game))
@@ -80,18 +96,24 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         if (current() == SeedKey.dailyNow()) g.text(g.tiny, "THIS IS TODAY'S SEED", cx, SLOT_Y + SLOT_H + 40f, Pal.GOLD, 1f, Align.center)
 
         showFocus = onButtons
+        val from = startAt()
+        val mode = if (recalled?.takeIf { it.key == current() }?.arcade == true) "ARCADE " else ""
+        playButton.label = if (from > 1 || mode.isNotEmpty()) "PLAY ${mode}FROM LV $from" else "PLAY THIS SEED"
+        playButton.small = playButton.label.length > 15
+        slots.update(dt)
         drawButtons()
         if (game.keyHints) {
             val hint = if (onButtons) "ARROWS and ENTER   -   TAB: back to the key" else "TYPE a key, ENTER to play   -   TAB: buttons"
-            g.text(g.tiny, hint, cx, 174f, Pal.DIM, 1f, Align.center)
+            g.text(g.tiny, hint, cx, 216f, Pal.DIM, 1f, Align.center)
         }
+        slots.caption(g, "SAVED LEVELS   -   tap one to bring it back, press and hold one to store what is showing", cx, 200f, Align.center)
 
         // How you have done on this key so far.
-        val rows = game.profile.seedScores(current(), 4)
-        g.text(g.tiny, "YOUR BEST ON ${SeedKey.pretty(current())}", cx, 146f, Pal.CYAN, 1f, Align.center)
-        if (rows.isEmpty()) g.text(g.tiny, "Not played yet.", cx, 118f, Pal.DIM, 1f, Align.center)
+        val rows = game.profile.seedScores(current(), 3)
+        g.text(g.tiny, "YOUR BEST ON ${SeedKey.pretty(current())}", cx, 134f, Pal.CYAN, 1f, Align.center)
+        if (rows.isEmpty()) g.text(g.tiny, "Not played yet.", cx, 108f, Pal.DIM, 1f, Align.center)
         for ((i, e) in rows.withIndex()) {
-            val y = 122f - i * 24f
+            val y = 112f - i * 24f
             g.text(g.small, "${i + 1}", cx - 150f, y, Pal.DIM)
             g.text(g.small, e.name, cx - 110f, y, Pal.TEXT)
             if (e.mastered) g.star(cx - 62f, y - 6f, 6f, 2.6f, 5, 90f, Pal.GOLD)
@@ -150,6 +172,6 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
     private companion object {
         const val SLOT_W = 50f
         const val SLOT_H = 56f
-        const val SLOT_Y = 296f
+        const val SLOT_Y = 312f
     }
 }

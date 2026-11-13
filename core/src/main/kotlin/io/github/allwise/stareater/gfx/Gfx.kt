@@ -109,6 +109,10 @@ class Gfx : Disposable {
         if (fontScale == 0f || abs(scale - fontScale) / fontScale > 0.08f) buildFonts(scale)
     }
 
+    /** Canvas pixels of window showing to the left and to the right of the canvas: the bars. */
+    val spareLeft: Float get() = viewport.screenX * W / viewport.screenWidth.coerceAtLeast(1)
+    val spareRight: Float get() = (screenW - viewport.screenX - viewport.screenWidth) * W / viewport.screenWidth.coerceAtLeast(1)
+
     /** Slides the canvas along whatever spare width the window has, keeping clear of notches. */
     private fun place() {
         val free = screenW - viewport.screenWidth

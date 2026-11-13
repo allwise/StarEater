@@ -51,13 +51,13 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         )
         section(
             "SEEDS",
-            "Every run has a six-letter seed key, and the same key deals the same levels to anyone. SEEDED RUN takes a " +
-                "key, or plays today's.",
+            "Every run has a six-letter seed key; the same key deals the same levels to anyone. Hold a slot to save a " +
+                "level for later. Beat a boss and new runs can start after it.",
         )
         section(
             "THE LONG GAME",
             "Stardust buys permanent skills. Own the whole tree and your runs land on the MASTERED board: same kit for " +
-                "everybody, and the only thing left to upgrade is you.",
+                "everybody.",
         )
         section(
             "ARCADE",

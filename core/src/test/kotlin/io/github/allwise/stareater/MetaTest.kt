@@ -2,6 +2,7 @@ package io.github.allwise.stareater
 
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
+import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.meta.Skill
@@ -152,5 +153,48 @@ class MetaTest {
         assertTrue(b.tilt)
         assertEquals(2, b.tiltSens)
         assertFalse(b.haptics)
+    }
+
+    @Test
+    fun beatingABossOpensAStartOnTheNextLevel() {
+        val store = MemoryStore()
+        val p = Profile(store)
+        assertEquals(listOf(1), p.startLevels())
+        p.startLevel = 11
+        assertEquals(1, p.startLevel, "cannot start past a boss that has not been beaten")
+
+        assertEquals(0, p.beatBoss(7), "only bosses count")
+        assertEquals(11, p.beatBoss(10))
+        assertEquals(0, p.beatBoss(10), "the same boss does not open anything twice")
+        assertEquals(21, p.beatBoss(20))
+        assertEquals(listOf(1, 11, 21), p.startLevels())
+        p.startLevel = 21
+        p.save()
+
+        val again = Profile(store)
+        assertEquals(20, again.checkpoint)
+        assertEquals(21, again.startLevel)
+        val run = SeedKey.newRun("STAR22", level = again.startLevel)
+        assertEquals(21, run.level)
+        assertEquals(21, run.startLevel)
+        assertEquals(1, SeedKey.newRun("STAR22").level)
+    }
+
+    @Test
+    fun fiveSavedLevelsSurviveAReload() {
+        val store = MemoryStore()
+        val p = Profile(store)
+        assertEquals(5, p.saved.size)
+        assertTrue(p.saved.all { it == null })
+        p.store(0, SavedLevel("STAR22", 7))
+        p.store(3, SavedLevel("MQQN99", 14, arcade = true))
+        p.store(0, SavedLevel("ABCDEF", 3)) // storing again replaces
+        assertEquals("ABC-DEF LV3", p.saved[0]!!.label)
+        assertEquals("MQQ-N99 LV14 A", p.saved[3]!!.label)
+
+        val again = Profile(store)
+        assertEquals(listOf("ABCDEF:3", null, null, "MQQN99:14", null), again.saved.map { it?.let { s -> "${s.key}:${s.level}" } })
+        assertTrue(again.saved[3]!!.arcade)
+        assertFalse(again.saved[0]!!.arcade)
     }
 }

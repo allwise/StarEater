@@ -96,7 +96,22 @@ object LevelGen {
      * The level a run is currently on. Depends only on the run's seed and level number, so every
      * player on the same seed key is dealt exactly the same sequence.
      */
-    fun forRun(run: RunState): LevelSpec = generate(run.level, Random(run.seed * 31 + run.level * 7919L), run.prevMove)
+    fun forRun(run: RunState): LevelSpec = forSeed(run.seed, run.level)
+
+    /**
+     * Level [n] of a seed. A level leans away from repeating the movement mode of the one before
+     * it, so the levels are dealt in order from the first: that way level 17 is the same level 17
+     * whether you played your way there, started from a checkpoint, or loaded it from a saved slot.
+     */
+    fun forSeed(seed: Long, n: Int): LevelSpec {
+        var prev: MoveKind? = null
+        var spec = generate(1, Random(seed * 31 + 7919L), null)
+        for (i in 2..n) {
+            prev = spec.move
+            spec = generate(i, Random(seed * 31 + i * 7919L), prev)
+        }
+        return spec
+    }
 
     /** Every tenth level: one enormous letter, a couple of minions, and no other twists. */
     fun bossLevel(n: Int, rng: Random, boss: EnemyType? = null, move: MoveKind? = null): LevelSpec {

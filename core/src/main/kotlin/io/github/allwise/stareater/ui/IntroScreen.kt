@@ -9,6 +9,7 @@ import io.github.allwise.stareater.gfx.Creatures
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
+import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.Enemy
 import io.github.allwise.stareater.sim.EnemyType
@@ -36,7 +37,8 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
     private val creatures = Creatures(game.gfx)
     private val models = HashMap<EnemyType, Enemy>()
 
-    private class Reel(val index: Int, var result: String, var pool: List<String>, var stopAt: Float) {
+    /** @param turn this reel's place in the order they stop in, which is not left to right */
+    private class Reel(val index: Int, val turn: Int, var result: String, var pool: List<String>, var stopAt: Float) {
         var landed = false
         var landedAt = 0f
         var lastTick = 0
@@ -44,6 +46,8 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
     }
 
     private val reels = ArrayList<Reel>()
+    private var landings = 0
+    private lateinit var slots: SavedSlots
     private lateinit var go: Button
     private val goLabel = if (run.level == 1) "START" else if (boss != null) "FIGHT" else "NEXT LEVEL"
 
@@ -61,13 +65,19 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
         val moves = MoveKind.values().map { it.title }
         // Plenty of blanks on the twist reels, so a blank does not look like a miracle.
         val twists = Rules.all.map { it.title } + List(5) { BLANK }
+        // The reels stop in whatever order they feel like, the way real ones do.
+        val order = (0 until LevelSpec.MAX_RULES).shuffled()
         for (i in 0 until LevelSpec.MAX_RULES) {
             val result = if (i == 0) spec.move.title else spec.modifiers.getOrNull(i - 1)?.let { Rules.byId(it).title } ?: BLANK
             // On a boss level nothing is going to land on its own: the reels just run until the boss arrives.
-            val stopAt = if (boss != null) FOREVER else FIRST_STOP + i * STOP_GAP
-            reels += Reel(i, result, if (i == 0) moves else twists, stopAt)
+            val stopAt = if (boss != null) FOREVER else FIRST_STOP + order[i] * STOP_GAP
+            reels += Reel(i, order[i], result, if (i == 0) moves else twists, stopAt)
         }
-        settleAt = if (boss != null) HIJACK_AT + HIJACK_STOP + (reels.size - 1) * HIJACK_GAP + 0.25f else reels.last().stopAt + 0.25f
+        val last = (reels.size - 1)
+        settleAt = (if (boss != null) HIJACK_AT + HIJACK_STOP + last * HIJACK_GAP else FIRST_STOP + last * STOP_GAP) + 0.25f
+
+        // Five slots beside the button: hold one to put this level by for later.
+        slots = SavedSlots(this, game, go.x + go.w + 14f, 35f, wide = false, current = { if (SeedKey.isValid(run.key)) SavedLevel(run.key, run.level, run.arcade != null) else null })
     }
 
     private fun start() {
@@ -93,7 +103,7 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
         for (r in reels) {
             r.result = letter
             r.pool = listOf(letter)
-            r.stopAt = HIJACK_AT + HIJACK_STOP + r.index * HIJACK_GAP
+            r.stopAt = HIJACK_AT + HIJACK_STOP + r.turn * HIJACK_GAP
         }
         game.audio.play(Sfx.BOSS_INTRO)
         game.audio.play(Sfx.SEAL_WARN, 0.8f, 0.6f)
@@ -130,19 +140,21 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
         jolt = max(0f, jolt - dt * 2.2f)
         if (boss != null && !hijacked && clock >= HIJACK_AT) hijack()
         // Only the next reel to stop ticks, or five of them would be a buzz rather than a rattle.
-        val next = reels.firstOrNull { !it.landed }
+        val next = reels.filter { !it.landed }.minByOrNull { it.stopAt }
         for (r in reels) {
             if (r.landed) continue
             if (clock >= r.stopAt) {
                 r.landed = true
                 r.landedAt = clock
+                // Each landing rings a little higher than the last, wherever on the machine it is.
+                val nth = landings++
                 if (hijacked) {
-                    game.audio.play(Sfx.BOSS_HIT, 0.7f + 0.06f * r.index)
+                    game.audio.play(Sfx.BOSS_HIT, 0.7f + 0.06f * nth)
                     jolt = max(jolt, 0.5f)
                 } else if (r.blank) {
                     game.audio.play(Sfx.REEL_STOP, 0.7f, 0.5f)
                 } else {
-                    game.audio.play(Sfx.REEL_STOP, 1f + 0.12f * r.index)
+                    game.audio.play(Sfx.REEL_STOP, 1f + 0.12f * nth)
                 }
                 game.buzz()
             } else if (r === next) {
@@ -276,7 +288,9 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
             g.text(g.tiny, t.blurb, x + 34f, y - 8f, Pal.DIM)
         }
 
+        slots.update(dt)
         drawButtons()
+        slots.caption(g, "HOLD TO SAVE THIS LEVEL", slots.right, 24f, Align.right)
         val hint = when {
             !settled -> if (game.keyHints) "ENTER stops the reels" else "tap to stop the reels"
             game.keyHints -> "ENTER to go   -   ESC ends the run"
@@ -320,7 +334,7 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
 
     /** A tap anywhere stops the reels; only the button itself moves on. */
     override fun touchDown(x: Float, y: Float, pointer: Int) {
-        if (!settled && !go.contains(x, y)) skip() else super.touchDown(x, y, pointer)
+        if (!settled && buttons.none { it.usable && it.contains(x, y) }) skip() else super.touchDown(x, y, pointer)
     }
 
     companion object {

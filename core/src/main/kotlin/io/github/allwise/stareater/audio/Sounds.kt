@@ -296,7 +296,8 @@ object Sounds {
                 "A5 - - - C6 - - - A5 - - - F5 - E5 -",
                 "D5 - - - G5 - - - B5 - - - D6 - - -",
                 "B5 - - - - - G5 - E5 - - - G5 - - -",
-                "A5 - - - - - - - - - - - . . . .",
+                // The last bar walks back down towards the first note, so the loop has no pause in it.
+                "A5 - - - - - - - E5 - - - D5 - B4 -",
             )
             Synth.song(
                 90,

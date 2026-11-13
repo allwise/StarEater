@@ -31,6 +31,9 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
 
     private var lastTick = 0
     private var klaxon = 0f
+
+    /** Set when beating this level's boss opened a new place to start from. */
+    private var unlocked = 0
     private var frameDt = 0f
 
     override fun show() {
@@ -43,6 +46,8 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 else -> Tune.ORBIT
             },
         )
+        // The player beams in: a soft whoop to go with it.
+        game.audio.play(Sfx.WRAP, 0.7f, 0.8f)
         button(Gfx.W / 2f - 140f, 268f, 280f, 44f, "RESUME") { paused = false }
         button(Gfx.W / 2f - 140f, 214f, 280f, 44f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(this, show = false) }) }
         button(Gfx.W / 2f - 140f, 160f, 280f, 44f, "END RUN") { game.go(GameOverScreen(game, run)) }
@@ -137,7 +142,11 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             is Fx.MeteorWarn -> audio.play(Sfx.WARN)
             is Fx.TimeUp -> audio.play(Sfx.UI_NO)
             is Fx.BossHit -> audio.play(Sfx.BOSS_HIT)
-            is Fx.BossDead -> audio.play(Sfx.BOSS_DEAD)
+            is Fx.BossDead -> {
+                audio.play(Sfx.BOSS_DEAD)
+                // A boss beaten is a checkpoint: from now on a run can begin on the level after it.
+                unlocked = game.profile.beatBoss(spec.number)
+            }
             is Fx.Cleared -> audio.play(Sfx.CLEAR)
             is Fx.Powered -> {
                 audio.play(Sfx.POWER_UP)
@@ -170,9 +179,50 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
      * being able to move the picture over.
      */
     override fun overlay() {
-        if (!controls.stickOn || paused) return
+        if (paused) return
+        // With the picture slid to one side, the bar left over is the joystick: say so.
+        val align = game.gfx.align
+        if (align < 0) pad(Gfx.W, game.gfx.spareRight) else if (align > 0) pad(-game.gfx.spareLeft, game.gfx.spareLeft)
+        if (!controls.stickOn) return
         g.ring(controls.stickOX, controls.stickOY, Controls.STICK_RANGE, 2f, Pal.CYAN, 0.25f)
         g.circle(controls.stickX, controls.stickY, 16f, Pal.CYAN, 0.3f)
+    }
+
+    /** Marks the spare strip beside the picture as the place to steer from: a pad with a stick at rest in it. */
+    private fun pad(x: Float, width: Float) {
+        if (width < 70f) return
+        val x0 = x + 8f
+        val w = width - 16f
+        val y0 = 10f
+        val h = Gfx.H - 20f
+        val cx = x0 + w / 2f
+        val cy = y0 + h * 0.42f
+        g.rect(x0, y0, w, h, Pal.PANEL, 0.35f)
+        g.frame(x0, y0, w, h, 1.5f, Pal.LINE, 0.7f)
+        // Corner brackets, so it reads as a control and not as a border.
+        val arm = minOf(22f, w / 4f)
+        for (sx in intArrayOf(0, 1)) for (sy in intArrayOf(0, 1)) {
+            val px = x0 + sx * w
+            val py = y0 + sy * h
+            val dx = if (sx == 0) arm else -arm
+            val dy = if (sy == 0) arm else -arm
+            g.line(px, py, px + dx, py, 3f, Pal.CYAN, 0.6f)
+            g.line(px, py, px, py + dy, 3f, Pal.CYAN, 0.6f)
+        }
+        g.text(g.tiny, "STEER", cx, y0 + h - 14f, Pal.DIM, 0.9f, Align.center)
+        // A finger down takes over: the live stick is drawn where the thumb actually is.
+        if (controls.stickOn) return
+        val r = minOf(Controls.STICK_RANGE, w / 2f - 14f)
+        val breathe = 0.5f + 0.5f * kotlin.math.sin(age * 2.2f)
+        g.ring(cx, cy, r, 2f, Pal.CYAN, 0.3f + 0.15f * breathe)
+        g.circle(cx, cy, r * 0.3f, Pal.CYAN, 0.22f + 0.1f * breathe)
+        for (i in 0 until 4) {
+            val ux = kotlin.math.cos(i * 1.5708f)
+            val uy = kotlin.math.sin(i * 1.5708f)
+            val tx = cx + ux * (r + 12f)
+            val ty = cy + uy * (r + 12f)
+            g.triangle(tx + ux * 7f, ty + uy * 7f, tx - uy * 6f, ty + ux * 6f, tx + uy * 6f, ty - ux * 6f, Pal.CYAN, 0.35f)
+        }
     }
 
     private fun banner() {
@@ -184,6 +234,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 g.glow(cx, cy, 300f, Pal.STAR, 0.25f * a)
                 g.text(g.huge, "CLEAR!", cx, cy + 40f, Pal.STAR, a, Align.center)
                 g.text(g.body, "+${world.clearBonus} BONUS", cx, cy - 28f, Pal.TEXT, a, Align.center)
+                if (unlocked > 0) g.text(g.small, "CHECKPOINT  -  NEW RUNS CAN NOW START AT LEVEL $unlocked", cx, cy - 62f, Pal.CYAN, a, Align.center)
             }
             World.Phase.DEAD -> {
                 val a = ((world.phaseTime - 0.3f) * 3f).coerceIn(0f, 1f)

@@ -38,9 +38,16 @@ object SeedKey {
     /** `ABCDEF` -> `ABC-DEF`. */
     fun pretty(key: String): String = if (key.length == LENGTH) key.substring(0, 3) + "-" + key.substring(3) else key
 
-    /** A fresh run on a key. An [arcade] run carries its own kit instead of the skill tree. */
-    fun newRun(key: String, arcade: Boolean = false): RunState =
-        RunState(seedOf(key), key).also { if (arcade) it.arcade = Arcade() }
+    /**
+     * A fresh run on a key, beginning on [level]. An [arcade] run carries its own kit instead of
+     * the skill tree.
+     */
+    fun newRun(key: String, arcade: Boolean = false, level: Int = 1): RunState =
+        RunState(seedOf(key), key).also {
+            if (arcade) it.arcade = Arcade()
+            it.level = level.coerceAtLeast(1)
+            it.startLevel = it.level
+        }
 
     private fun encode(value: Int): String {
         val sb = StringBuilder(LENGTH)

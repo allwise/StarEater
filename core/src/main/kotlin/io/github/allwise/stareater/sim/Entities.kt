@@ -132,11 +132,34 @@ class Meteor(val horizontal: Boolean, val line: Int, val dir: Int, var warn: Flo
     val y: Float get() = if (horizontal) line + 0.5f else pos
 }
 
-/** A black hole. */
-class Well(var x: Float, var y: Float, val pull: Float)
+/**
+ * How hard things pull. A sun comes in three stages - a dwarf, a star, a giant - and only ever
+ * pulls: you can fly straight through one. A black hole (stage 0) pulls about like a middling sun,
+ * but touching it is the end.
+ */
+object Gravity {
+    const val HOLE = 0
+
+    /** Strength relative to the one setting the game used to have, which sat at "two and a half". */
+    fun factor(stage: Int): Float = (if (stage == HOLE) 2f else stage.toFloat()) / 2.5f
+}
+
+/** A gravity well drifting about a level: a sun of stage 1 to 3, or a black hole. */
+class Well(var x: Float, var y: Float, val stage: Int, val pull: Float) {
+    val blackHole: Boolean get() = stage == Gravity.HOLE
+
+    /** How big it is, in tiles. For a black hole this is the event horizon: inside it you are gone. */
+    val radius: Float get() = if (blackHole) HORIZON else 0.4f + 0.2f * stage
+
+    companion object {
+        const val HORIZON = 0.7f
+    }
+}
 
 /** The thing in the middle of an orbit level: a sun, or a black hole. */
-class Sun(val x: Float, val y: Float, val radius: Float, val gm: Float, val blackHole: Boolean)
+class Sun(val x: Float, val y: Float, val radius: Float, val gm: Float, val stage: Int) {
+    val blackHole: Boolean get() = stage == Gravity.HOLE
+}
 
 /** A patch of light left behind in a Lights Out level. */
 class Flare(var x: Float, var y: Float, val radius: Float, var life: Float, val maxLife: Float)
@@ -201,6 +224,9 @@ class RunState(val seed: Long, val key: String = "") {
     var starsEaten = 0
     var bestCombo = 1
     var secondWindUsed = false
+
+    /** The level this run began on: 1, or further in from a checkpoint or a saved level. */
+    var startLevel = 1
     var prevMove: MoveKind? = null
     var time = 0f
 

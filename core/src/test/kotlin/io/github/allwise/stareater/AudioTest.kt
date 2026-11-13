@@ -1,6 +1,7 @@
 package io.github.allwise.stareater
 
 import io.github.allwise.stareater.audio.Audio
+import io.github.allwise.stareater.audio.LoopPlayer
 import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.audio.Sounds
 import io.github.allwise.stareater.audio.Synth
@@ -92,6 +93,46 @@ class AudioTest {
         var biggest = 0
         for (i in 1 until pcm.size) biggest = maxOf(biggest, abs(pcm[i] - pcm[i - 1]))
         assertTrue(abs(pcm[0] - pcm[pcm.size - 1]) <= biggest, "the filtered loop clicks where it wraps")
+    }
+
+    /** The point of streaming the music ourselves: the last sample is followed by the first, nothing else. */
+    @Test
+    fun aLoopedTuneWrapsWithoutASeam() {
+        val tune = ShortArray(1000) { (it + 1).toShort() }
+        val player = LoopPlayer()
+        val block = ShortArray(64)
+        player.fill(block, 1f)
+        assertTrue(block.all { it.toInt() == 0 }, "nothing started, nothing played")
+
+        player.start(tune)
+        player.fill(block, 1f) // the volume glides up over the first block
+        assertEquals(0, block[0].toInt())
+        assertEquals(64, block[63].toInt())
+        val heard = ArrayList<Int>()
+        repeat(40) { player.fill(block, 1f); for (v in block) heard += v.toInt() }
+        // 64 samples went by in the fade; from there it must be the tune, round and round, with no gap and no repeat.
+        for ((i, v) in heard.withIndex()) assertEquals((64 + i) % 1000 + 1, v, "sample $i")
+
+        // Turning it down glides too, and ends exactly on silence.
+        player.fill(block, 0f)
+        assertTrue(abs(block[0].toInt()) > abs(block[63].toInt()))
+        assertEquals(0f, player.gain)
+    }
+
+    /** What is in the loop has to join up as well: the end of each tune must run on into its start. */
+    @Test
+    fun everyTuneRunsOnFromItsEndIntoItsStart() {
+        val tenth = Synth.RATE / 10
+        for (t in Tune.values()) {
+            val data = Sounds.render(t).data
+            val n = data.size
+            val bar = n / 8
+            // The last bar must still be ringing when the loop comes round, like every other bar does
+            // at its own end - not died away into a pause before the restart.
+            fun ring(end: Int): Double { var e = 0.0; for (i in end - tenth until end) e += data[i].toDouble() * data[i]; return e }
+            val others = (1..7).map { ring(it * bar) }.sorted()
+            assertTrue(ring(n) > others[0] * 0.5, "${t.name}: the tune dies away before it loops (${ring(n)} against ${others[0]})")
+        }
     }
 
     @Test

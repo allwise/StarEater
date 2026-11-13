@@ -6,17 +6,20 @@ import io.github.allwise.stareater.sim.Bot
 import io.github.allwise.stareater.sim.Eater
 import io.github.allwise.stareater.sim.Enemies
 import io.github.allwise.stareater.sim.Geo
+import io.github.allwise.stareater.sim.Gravity
 import io.github.allwise.stareater.sim.InputState
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.LevelSpec
 import io.github.allwise.stareater.sim.Loadout
 import io.github.allwise.stareater.sim.MoveKind
+import io.github.allwise.stareater.sim.OrbitMovement
 import io.github.allwise.stareater.sim.PowerUp
 import io.github.allwise.stareater.sim.Rules
 import io.github.allwise.stareater.sim.RunState
 import io.github.allwise.stareater.sim.Stalker
 import io.github.allwise.stareater.sim.Warden
 import io.github.allwise.stareater.sim.Warper
+import io.github.allwise.stareater.sim.Well
 import io.github.allwise.stareater.sim.World
 import kotlin.random.Random
 import kotlin.test.Test
@@ -207,32 +210,150 @@ class SimTest {
         }
     }
 
+    /** Whatever is in the middle - dwarf, star, giant or black hole - doing nothing must be survivable. */
     @Test
     fun coastingInOrbitIsSurvivable() {
-        val w = world(LevelGen.build(5, MoveKind.ORBIT, emptyList(), listOf(Eater)))
-        val sun = w.sun!!
-        val input = InputState()
-        repeat(60 * 30) {
-            w.enemies.clear()
-            w.stars.clear() // nothing to eat, so the level cannot end under us
-            w.update(1f / 60f, input)
-            w.fx.clear()
+        for (stage in 0..3) {
+            val w = world(LevelGen.build(5, MoveKind.ORBIT, emptyList(), listOf(Eater)))
+            val sun = OrbitMovement.sunOf(w, stage)
+            w.sun = sun
+            w.player.place(sun.x + OrbitMovement.START_RADIUS, sun.y)
+            w.player.vx = 0f
+            w.player.vy = kotlin.math.sqrt(sun.gm / OrbitMovement.START_RADIUS)
+            val input = InputState()
+            repeat(60 * 30) {
+                w.enemies.clear()
+                w.stars.clear() // nothing to eat, so the level cannot end under us
+                w.update(1f / 60f, input)
+                w.fx.clear()
+            }
+            assertEquals(World.Phase.PLAYING, w.phase, "stage $stage")
+            val r = kotlin.math.hypot(w.player.x - sun.x, w.player.y - sun.y)
+            assertTrue(r in 4f..10f, "stage $stage: a hands-off orbit should stay an orbit, but ended at radius $r")
         }
-        assertEquals(World.Phase.PLAYING, w.phase)
-        val r = kotlin.math.hypot(w.player.x - sun.x, w.player.y - sun.y)
-        assertTrue(r in 4f..10f, "a hands-off orbit should stay an orbit, but ended at radius $r")
     }
 
     @Test
-    fun fallingIntoTheSunHurts() {
+    fun aSunOnlyPullsButABlackHoleIsTheEnd() {
+        // Into a sun, even the heaviest: out the other side, shield untouched.
         val w = world(LevelGen.build(5, MoveKind.ORBIT, emptyList(), listOf(Eater)), Loadout(shields = 1))
-        w.enemies.clear()
+        w.sun = OrbitMovement.sunOf(w, 3)
         val sun = w.sun!!
-        w.player.place(sun.x + 0.5f, sun.y)
+        w.player.place(sun.x + 0.2f, sun.y)
         w.player.vx = 0f; w.player.vy = 0f
-        w.update(1f / 60f, InputState())
-        assertEquals(0, w.player.shields)
-        assertTrue(kotlin.math.hypot(w.player.x - sun.x, w.player.y - sun.y) > sun.radius, "should be spat back out")
+        repeat(30) { w.enemies.clear(); w.update(1f / 60f, InputState()) }
+        assertEquals(World.Phase.PLAYING, w.phase)
+        assertEquals(1, w.player.shields, "a sun must not cost a shield")
+
+        // Into a black hole: dead, shields or no shields.
+        val b = world(LevelGen.build(5, MoveKind.ORBIT, emptyList(), listOf(Eater)), Loadout(shields = 2))
+        b.sun = OrbitMovement.sunOf(b, Gravity.HOLE)
+        b.enemies.clear()
+        b.player.place(b.sun!!.x + 0.3f, b.sun!!.y)
+        b.player.invuln = 5f
+        b.update(1f / 60f, InputState())
+        assertEquals(World.Phase.DEAD, b.phase, "a black hole goes straight through shields and invulnerability")
+
+        // Only a Second Wind cheats it - once - and throws you clear.
+        val c = world(LevelGen.build(5, MoveKind.ORBIT, emptyList(), listOf(Eater)), Loadout(secondWind = true))
+        c.sun = OrbitMovement.sunOf(c, Gravity.HOLE)
+        c.enemies.clear()
+        c.player.place(c.sun!!.x + 0.3f, c.sun!!.y)
+        c.update(1f / 60f, InputState())
+        assertEquals(World.Phase.PLAYING, c.phase)
+        assertTrue(c.run.secondWindUsed)
+        assertTrue(kotlin.math.hypot(c.player.x - c.sun!!.x, c.player.y - c.sun!!.y) > c.sun!!.radius, "should be thrown clear")
+    }
+
+    @Test
+    fun sunsComeInThreeStagesAndPullHarderEachTime() {
+        assertTrue(Gravity.factor(1) < Gravity.factor(2) && Gravity.factor(2) < Gravity.factor(3))
+        assertTrue(Gravity.factor(2) < 1f && Gravity.factor(3) > 1f, "the old single setting sat between stages 2 and 3")
+        val stages = HashSet<Int>()
+        for (seed in 0 until 200L) for (move in listOf(MoveKind.GLIDE, MoveKind.SCROLL)) for (level in listOf(4, 9, 20)) {
+            val w = world(LevelGen.build(level, move, listOf("gravity"), listOf(Eater)), seed = seed)
+            assertTrue(w.wells.isNotEmpty())
+            assertTrue(w.wells.size <= if (move == MoveKind.SCROLL) 3 else 2, "$move L$level has ${w.wells.size} wells")
+            assertTrue(w.wells.count { it.blackHole } <= 2)
+            for (well in w.wells) {
+                assertTrue(well.stage in 0..3)
+                stages += well.stage
+            }
+        }
+        assertEquals(setOf(0, 1, 2, 3), stages)
+        assertEquals(3, world(LevelGen.build(20, MoveKind.SCROLL, listOf("gravity"), listOf(Eater))).wells.size)
+    }
+
+    @Test
+    fun aDriftingSunIsHarmlessAndADriftingBlackHoleIsNot() {
+        fun fly(stage: Int): World {
+            val w = world(LevelGen.build(6, MoveKind.GLIDE, listOf("gravity"), listOf(Eater)), Loadout(shields = 1))
+            w.wells.clear()
+            w.wells += Well(10f, 7f, stage, 22f * Gravity.factor(stage))
+            w.player.place(10.2f, 7f)
+            w.player.vx = 0f; w.player.vy = 0f
+            repeat(20) { w.enemies.clear(); w.update(1f / 60f, InputState()) }
+            return w
+        }
+        for (stage in 1..3) {
+            val w = fly(stage)
+            assertEquals(World.Phase.PLAYING, w.phase, "stage $stage")
+            assertEquals(1, w.player.shields, "stage $stage")
+        }
+        assertEquals(World.Phase.DEAD, fly(Gravity.HOLE).phase)
+    }
+
+    /** A shy star against the star magnet: the small maw cannot hold it, the big one fights it to a draw. */
+    @Test
+    fun shyStarsPutUpAFightAgainstTheMagnet() {
+        fun gapAfter(magnet: Float, seconds: Float, start: Float = 2f, track: ((Float) -> Unit)? = null): Float {
+            val w = world(LevelGen.build(3, MoveKind.GLIDE, listOf("shy"), listOf(Eater)), Loadout(magnet = magnet))
+            w.player.place(10f, 7f)
+            var d = 0f
+            repeat((seconds * 60).toInt()) {
+                w.enemies.clear()
+                // One star only, and never let the level top the field back up around it.
+                while (w.stars.size > 1) w.stars.removeAt(w.stars.size - 1)
+                if (it == 0) w.stars[0].let { s -> s.place(10f + start, 7f); s.vx = 0f; s.vy = 0f; s.ttl = 0f }
+                w.player.place(10f, 7f)
+                w.player.vx = 0f; w.player.vy = 0f
+                w.update(1f / 60f, InputState())
+                if (w.stars.isEmpty()) return 0f
+                d = w.dist(w.stars[0].x, w.stars[0].y, 10f, 7f)
+                track?.invoke(d)
+            }
+            return d
+        }
+        val free = gapAfter(0f, 0.4f)
+        val weak = gapAfter(2.2f, 0.4f)
+        assertTrue(free > 2.9f, "with no magnet a shy star should get away as it always did, got $free")
+        assertTrue(weak > 2.05f, "the small maw must not be able to reel a shy star in, got $weak")
+        assertTrue(weak < free - 0.3f, "but it should slow the star's retreat: $weak vs $free")
+
+        // The big maw: neither side wins quickly. The star sways in and out but is not simply swallowed.
+        var nearest = 99f
+        var furthest = 0f
+        val end = gapAfter(3.8f, 4f, start = 2.6f) { nearest = minOf(nearest, it); furthest = maxOf(furthest, it) }
+        assertTrue(end > 0f && nearest > 0.9f, "the big maw simply swallowed a shy star (nearest $nearest)")
+        assertTrue(furthest < 3.8f, "and it should not lose its grip either (furthest $furthest)")
+        assertTrue(furthest - nearest > 0.3f, "there should be some give and take: $nearest to $furthest")
+    }
+
+    /** Checkpoints and saved levels only work if level N of a seed is the same however you got to it. */
+    @Test
+    fun aLevelIsTheSameHoweverYouReachIt() {
+        fun show(s: LevelSpec) = "${s.move} ${s.modifiers} ${s.roster.map { it.id }} ${s.boss?.id} ${s.quota}"
+        for (seed in listOf(1L, 77L, 123456789L)) {
+            val walked = RunState(seed)
+            for (n in 1..25) {
+                walked.level = n
+                val spec = LevelGen.forRun(walked)
+                walked.prevMove = spec.move
+                val jumped = RunState(seed).also { it.level = n; it.startLevel = n }
+                assertEquals(show(spec), show(LevelGen.forRun(jumped)), "seed $seed level $n")
+                assertEquals(show(spec), show(LevelGen.forSeed(seed, n)))
+            }
+        }
     }
 
     @Test

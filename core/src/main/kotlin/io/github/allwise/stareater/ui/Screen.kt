@@ -1,5 +1,6 @@
 package io.github.allwise.stareater.ui
 
+import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.utils.Align
@@ -17,6 +18,12 @@ class Button(var x: Float, var y: Float, var w: Float, var h: Float, var label: 
 
     /** For buttons that make their own noise. */
     var silent = false
+
+    /** Draws the button lit up even without the focus: for ones that are holding something. */
+    var lit = false
+
+    /** Set to make the button do something else when it is pressed and held rather than tapped. */
+    var onHold: (() -> Unit)? = null
 
     val usable: Boolean get() = enabled && visible
     val cx: Float get() = x + w / 2f
@@ -37,6 +44,9 @@ abstract class Screen(val game: StarEaterGame) {
     /** Set false to draw the buttons with none of them highlighted. */
     protected var showFocus = true
     private var pressed: Button? = null
+    private var pressedByKey = false
+    private var heldFor = 0f
+    private var holdDone = false
 
     /** True while the screen wants raw letter keys (so global shortcuts must keep their hands off). */
     open val typing: Boolean get() = false
@@ -58,14 +68,25 @@ abstract class Screen(val game: StarEaterGame) {
 
     protected fun drawButtons() {
         if (focus !in buttons.indices || !buttons[focus].usable) focus = buttons.indexOfFirst { it.usable }.coerceAtLeast(0)
+        // A button with a hold action fires it once the press has lasted long enough.
+        val held = pressed?.takeIf { it.onHold != null && it.usable }
+        if (held != null && !holdDone) {
+            heldFor += Gdx.graphics.deltaTime
+            if (heldFor >= HOLD_TIME) {
+                holdDone = true
+                held.onHold?.invoke()
+            }
+        }
         for ((i, b) in buttons.withIndex()) {
             if (!b.visible) continue
             val focused = showFocus && i == focus && b.enabled
             val a = if (b.enabled) 1f else 0.4f
             g.rect(b.x, b.y, b.w, b.h, if (focused) Pal.PANEL_HI else Pal.PANEL, 0.95f * a)
-            g.frame(b.x, b.y, b.w, b.h, 2f, if (focused) b.accent else Pal.LINE, a)
+            // The press fills the button up, so it is plain that holding is doing something.
+            if (b === held && !holdDone && heldFor > 0.12f) g.rect(b.x, b.y, b.w * (heldFor / HOLD_TIME).coerceAtMost(1f), b.h, b.accent, 0.4f)
+            g.frame(b.x, b.y, b.w, b.h, 2f, if (focused || b.lit) b.accent else Pal.LINE, if (b.lit && !focused) a * 0.75f else a)
             val font = if (b.small) g.small else g.body
-            g.text(font, b.label, b.cx, b.cy + font.capHeight / 2f, if (focused) Pal.TEXT else Pal.DIM, a, Align.center)
+            g.text(font, b.label, b.cx, b.cy + font.capHeight / 2f, if (focused || b.lit) Pal.TEXT else Pal.DIM, a, Align.center)
         }
     }
 
@@ -80,13 +101,32 @@ abstract class Screen(val game: StarEaterGame) {
             Keys.DOWN, Keys.S -> moveFocus(0, -1)
             Keys.LEFT, Keys.A -> moveFocus(-1, 0)
             Keys.RIGHT, Keys.D -> moveFocus(1, 0)
-            Keys.ENTER, Keys.NUMPAD_ENTER, Keys.SPACE -> buttons.getOrNull(focus)?.takeIf { it.usable }?.let { click(it) }
+            Keys.ENTER, Keys.NUMPAD_ENTER, Keys.SPACE -> buttons.getOrNull(focus)?.takeIf { it.usable }?.let {
+                // A plain button goes on the way down; one that can be held waits to see which it is.
+                if (it.onHold == null) click(it) else press(it, byKey = true)
+            }
             else -> return false
         }
         return true
     }
 
-    open fun keyUp(key: Int) {}
+    open fun keyUp(key: Int) {
+        if (pressedByKey && (key == Keys.ENTER || key == Keys.NUMPAD_ENTER || key == Keys.SPACE)) release(true)
+    }
+
+    private fun press(b: Button, byKey: Boolean) {
+        pressed = b
+        pressedByKey = byKey
+        heldFor = 0f
+        holdDone = false
+    }
+
+    private fun release(inside: Boolean) {
+        val p = pressed
+        pressed = null
+        pressedByKey = false
+        if (p != null && p.usable && inside && !holdDone) click(p)
+    }
     open fun keyTyped(c: Char) {}
 
     /** Moves focus to the nearest usable button in a direction. */
@@ -119,14 +159,13 @@ abstract class Screen(val game: StarEaterGame) {
         val i = buttons.indexOfFirst { it.usable && it.contains(x, y) }
         if (i >= 0) {
             focus = i
-            pressed = buttons[i]
+            press(buttons[i], byKey = false)
         }
     }
 
     open fun touchUp(x: Float, y: Float, pointer: Int) {
-        val p = pressed
-        pressed = null
-        if (p != null && p.usable && p.contains(x, y)) click(p)
+        if (pressedByKey) return
+        release(pressed?.contains(x, y) == true)
     }
 
     open fun touchDragged(x: Float, y: Float, pointer: Int) {}
@@ -134,5 +173,13 @@ abstract class Screen(val game: StarEaterGame) {
     open fun mouseMoved(x: Float, y: Float) {
         val i = buttons.indexOfFirst { it.usable && it.contains(x, y) }
         if (i >= 0) focus = i
+    }
+
+    /** For helpers that lay out buttons on a screen's behalf. */
+    internal fun addButton(x: Float, y: Float, w: Float, h: Float, label: String, action: () -> Unit): Button = button(x, y, w, h, label, action)
+
+    private companion object {
+        /** Seconds a press must last to count as a hold. */
+        const val HOLD_TIME = 0.65f
     }
 }

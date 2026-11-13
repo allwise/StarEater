@@ -308,14 +308,16 @@ class ScrollMovement : ContinuousMovement(MoveKind.SCROLL, accel = 70f, drag = 7
 
 /**
  * Mode 4: a solar system. A sun (or a black hole) sits in the middle and pulls on everything; stars
- * ride their orbits; you coast unless you burn. Fall in and it costs you.
+ * ride their orbits; you coast unless you burn. A sun you can dive through; a black hole you cannot.
  */
 class OrbitMovement : ContinuousMovement(MoveKind.ORBIT, accel = 22f, drag = 0f, maxSpeed = 11f) {
     override val enemySpeedFactor = 1.1f
 
     override fun setup(w: World) {
-        val black = w.rng.nextFloat() < 0.35f
-        val sun = Sun(w.w / 2f, w.h / 2f, if (black) 1.0f else 1.3f, if (black) GM * 1.35f else GM, black)
+        val black = w.rng.nextFloat() < 0.3f
+        // A dwarf or a middling sun to begin with; the giants turn up from level 6.
+        val stage = if (black) Gravity.HOLE else 1 + w.rng.nextInt(min(3, 1 + w.spec.number / 3))
+        val sun = sunOf(w, stage)
         w.sun = sun
         // Start the player in a tidy circular orbit, so doing nothing is survivable.
         val p = w.player
@@ -343,14 +345,15 @@ class OrbitMovement : ContinuousMovement(MoveKind.ORBIT, accel = 22f, drag = 0f,
             val dx = p.x - sun.x
             val dy = p.y - sun.y
             val d = hypot(dx, dy)
-            val limit = sun.radius + 0.3f
-            if (d < limit) {
+            // Only a black hole has anything to hit. Past its horizon that is that - unless a Second
+            // Wind throws you clear.
+            val limit = sun.radius
+            if (sun.blackHole && d < limit) {
                 val ux = if (d > 0.01f) dx / d else 1f
                 val uy = if (d > 0.01f) dy / d else 0f
-                w.hitPlayer()
-                // Spat back out, whether or not it hurt.
-                p.x = sun.x + ux * (limit + 0.05f)
-                p.y = sun.y + uy * (limit + 0.05f)
+                w.hitPlayer(fatal = true)
+                p.x = sun.x + ux * (limit + 0.6f)
+                p.y = sun.y + uy * (limit + 0.6f)
                 p.vx = ux * 9f; p.vy = uy * 9f
             }
         }
@@ -373,8 +376,8 @@ class OrbitMovement : ContinuousMovement(MoveKind.ORBIT, accel = 22f, drag = 0f,
             val a = sun.gm * 0.3f / max(d * d, 1f)
             e.vx += dx / d * a * dt
             e.vy += dy / d * a * dt
-            if (d < sun.radius + e.radius) {
-                // Lure them in: the sun does not take sides.
+            if (sun.blackHole && d < sun.radius + e.radius) {
+                // Lure them in: a black hole does not take sides.
                 w.stun(e, 2.5f)
                 e.x = sun.x - dx / d * (sun.radius + e.radius + 0.3f)
                 e.y = sun.y - dy / d * (sun.radius + e.radius + 0.3f)
@@ -383,7 +386,14 @@ class OrbitMovement : ContinuousMovement(MoveKind.ORBIT, accel = 22f, drag = 0f,
     }
 
     companion object {
+        /** The pull the game used to have for every sun: between a stage 2 and a stage 3. */
         const val GM = 110f
         const val START_RADIUS = 6.5f
+
+        /** The centre of an orbit level, for a given stage (0 for a black hole). */
+        fun sunOf(w: World, stage: Int): Sun {
+            val radius = if (stage == Gravity.HOLE) 1f else 0.7f + 0.3f * stage
+            return Sun(w.w / 2f, w.h / 2f, radius, GM * Gravity.factor(stage), stage)
+        }
     }
 }

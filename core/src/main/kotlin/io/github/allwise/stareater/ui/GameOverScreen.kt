@@ -11,6 +11,7 @@ import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.Sparkles
 import io.github.allwise.stareater.gfx.WorldRenderer
+import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.RunState
 import kotlin.math.exp
@@ -42,6 +43,7 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
     private var lastY = 0f
     private var lastT = 0f
     private var spinning = 0f
+    private lateinit var slots: SavedSlots
 
     override val typing: Boolean get() = entering
 
@@ -63,16 +65,20 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
         val y = 34f
         val w = 196f
         val x0 = Gfx.W / 2f - (w * 4 + 12f * 3) / 2f
-        button(x0, y, w, 44f, "NEW RUN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade))) }
-        button(x0 + (w + 12f), y, w, 44f, "SAME SEED") { game.go(IntroScreen(game, SeedKey.newRun(run.key, arcade))) }.enabled = SeedKey.isValid(run.key)
+        button(x0, y, w, 44f, "NEW RUN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade, p.startLevel))) }
+        // The same run again, from wherever this one began.
+        button(x0 + (w + 12f), y, w, 44f, "SAME SEED") { game.go(IntroScreen(game, SeedKey.newRun(run.key, arcade, run.startLevel))) }.enabled = SeedKey.isValid(run.key)
         button(x0 + (w + 12f) * 2, y, w, 44f, "SKILL TREE") { game.go(SkillScreen(game)) }
         button(x0 + (w + 12f) * 3, y, w, 44f, "MENU") { game.go(MenuScreen(game)) }
         button(Gfx.W / 2f + 150f, SLOT_Y + 4f, 110f, 44f, "OK") { confirm() }.accent = Pal.GOLD
+        // Hold a slot to keep the level this run ended on, to have another go at it later.
+        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { if (SeedKey.isValid(run.key)) SavedLevel(run.key, run.level, arcade) else null })
         refresh()
     }
 
     private fun refresh() {
         for ((i, b) in buttons.withIndex()) b.visible = if (i == 4) entering else !entering
+        slots.visible = !entering
         focus = if (entering) 4 else 0
     }
 
@@ -191,7 +197,10 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
                 }
             }
         }
+        slots.update(dt)
         drawButtons()
+        val keep = if (SeedKey.isValid(run.key)) "PRESS AND HOLD A SLOT TO KEEP LEVEL ${run.level} OF ${SeedKey.pretty(run.key)} FOR ANOTHER GO" else "SAVED LEVELS"
+        slots.caption(g, keep, cx, 204f, Align.center)
     }
 
     /** Cycles smoothly through the party palette. */

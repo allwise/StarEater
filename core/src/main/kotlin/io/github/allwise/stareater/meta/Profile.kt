@@ -16,6 +16,12 @@ class MemoryStore : KeyValueStore {
     override fun flush() {}
 }
 
+/** A level put by for later: a seed key and how far into it. Five of these fit in the profile. */
+class SavedLevel(val key: String, val level: Int, val arcade: Boolean = false) {
+    /** `STA-R22 LV7`, with an `A` on the end for an arcade run. */
+    val label: String get() = "${SeedKey.pretty(key)} LV$level" + (if (arcade) " A" else "")
+}
+
 class ScoreEntry(
     val name: String, val score: Int, val level: Int, val mastered: Boolean, val epochMs: Long,
     val seed: String = "",
@@ -55,6 +61,17 @@ class Profile(private val store: KeyValueStore) {
 
     /** Little taps through the vibration motor. */
     var haptics = true
+
+    /** The highest boss level beaten so far (10, 20, ...). Beating one opens a start on the level after it. */
+    var checkpoint = 0
+        private set
+
+    /** Where new runs begin: level 1, or the level after any boss already beaten. */
+    var startLevel = 1
+        set(v) { field = if (v in startLevels()) v else 1 }
+
+    /** Five slots, like the preset buttons on a car radio: hold one to store, tap it to recall. */
+    val saved = arrayOfNulls<SavedLevel>(SAVE_SLOTS)
     val owned: MutableSet<Skill> = LinkedHashSet()
     private val scores = ArrayList<ScoreEntry>()
 
@@ -75,6 +92,13 @@ class Profile(private val store: KeyValueStore) {
         tilt = store.get(K_TILT) == "1"
         tiltSens = store.get(K_TILT_SENS)?.toIntOrNull() ?: 1
         haptics = store.get(K_HAPTICS) != "0"
+        checkpoint = (store.get(K_CHECKPOINT)?.toIntOrNull() ?: 0).coerceAtLeast(0)
+        startLevel = store.get(K_START)?.toIntOrNull() ?: 1
+        store.get(K_SAVED)?.split(',')?.forEachIndexed { i, text ->
+            val f = text.split(':')
+            val level = f.getOrNull(1)?.toIntOrNull()
+            if (i < SAVE_SLOTS && level != null && level >= 1 && SeedKey.isValid(f[0])) saved[i] = SavedLevel(f[0], level, f.getOrNull(2) == "A")
+        }
         store.get(K_SKILLS)?.split(',')?.forEach { id ->
             Skill.values().firstOrNull { it.name == id }?.let { owned += it }
         }
@@ -112,6 +136,22 @@ class Profile(private val store: KeyValueStore) {
         stardust += dust
         totalRuns++
         if (level > bestLevel) bestLevel = level
+        save()
+    }
+
+    /** Every level a run may start on, lowest first. */
+    fun startLevels(): List<Int> = (0..checkpoint / CHECKPOINT_EVERY).map { it * CHECKPOINT_EVERY + 1 }
+
+    /** Records a beaten boss. Returns the level that just became a starting point, or 0 if it already was. */
+    fun beatBoss(level: Int): Int {
+        if (level <= checkpoint || level % CHECKPOINT_EVERY != 0) return 0
+        checkpoint = level
+        save()
+        return level + 1
+    }
+
+    fun store(slot: Int, level: SavedLevel) {
+        saved[slot] = level
         save()
     }
 
@@ -172,6 +212,8 @@ class Profile(private val store: KeyValueStore) {
         stardust = 0
         totalRuns = 0
         bestLevel = 0
+        checkpoint = 0
+        startLevel = 1
         owned.clear()
         scores.clear()
         save()
@@ -188,6 +230,8 @@ class Profile(private val store: KeyValueStore) {
             it.initials = initials; it.lastSeed = lastSeed; it.musicOn = musicOn; it.sfxOn = sfxOn
             it.musicVol = musicVol; it.sfxVol = sfxVol; it.screenAlign = screenAlign
             it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics
+            it.checkpoint = checkpoint; it.startLevel = startLevel
+            saved.copyInto(it.saved)
             it.owned += owned; it.scores += scores
             it.save()
         }
@@ -207,6 +251,9 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_TILT, if (tilt) "1" else "0")
         store.put(K_TILT_SENS, tiltSens.toString())
         store.put(K_HAPTICS, if (haptics) "1" else "0")
+        store.put(K_CHECKPOINT, checkpoint.toString())
+        store.put(K_START, startLevel.toString())
+        store.put(K_SAVED, saved.joinToString(",") { if (it == null) "" else "${it.key}:${it.level}:${if (it.arcade) "A" else ""}" })
         store.put(K_SKILLS, owned.joinToString(",") { it.name })
         store.put(K_SCORES, scores.joinToString("\n") { "${it.name}|${it.score}|${it.level}|${if (it.mastered) 1 else 0}|${it.epochMs}|${it.seed}|${if (it.arcade) 1 else 0}" })
         store.flush()
@@ -216,6 +263,13 @@ class Profile(private val store: KeyValueStore) {
         const val BOARD_SIZE = 10
         const val VOLUME_MAX = 10
         const val VOLUME_DEFAULT = 8
+        const val SAVE_SLOTS = 5
+
+        /** Same as the gap between bosses: every boss is a checkpoint. */
+        const val CHECKPOINT_EVERY = 10
+        private const val K_CHECKPOINT = "checkpoint"
+        private const val K_START = "startLevel"
+        private const val K_SAVED = "savedLevels"
         private const val K_MUSIC_VOL = "musicVol"
         private const val K_SFX_VOL = "sfxVol"
         private const val K_ALIGN = "screenAlign"

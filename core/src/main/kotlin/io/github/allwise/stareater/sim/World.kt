@@ -47,6 +47,9 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     var restless = false
     var tailActive = false
 
+    /** Set by Shy Stars: stars back away, and a star magnet has a fight on its hands. */
+    var shyStars = false
+
     /** Seconds on the Countdown clock, or negative when there is no clock. */
     var timeLeft = -1f
 
@@ -395,7 +398,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             val d = dist(s.x, s.y, p.x, p.y)
             if (loadout.magnet > 0f && s.lit && d < loadout.magnet && d > 0.01f) {
                 s.orbitR = 0f // the maw's pull beats the orbit
-                val pull = (3f + 9f * (1f - d / loadout.magnet)) * dt
+                val pull = magnetPull(s, d) * dt
                 s.x = Geo.wrap(s.x + dx(s.x, p.x, true) / d * pull, w)
                 s.y += dy(s.y, p.y, true) / d * pull
                 if (wrapY) s.y = Geo.wrap(s.y, h)
@@ -412,6 +415,17 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         if (spec.move != MoveKind.SCROLL) {
             while (stars.size < spec.starsOnField) spawnStar()
         }
+    }
+
+    /**
+     * How fast the star magnet reels a star in, in tiles per second. Against a shy star it is a
+     * contest: the small maw only slows its retreat, the big one holds it in a tug-of-war that sways
+     * back and forth and, given patience, comes your way.
+     */
+    private fun magnetPull(s: Star, d: Float): Float {
+        if (!shyStars) return 3f + 9f * (1f - d / loadout.magnet)
+        val flee = ShyStarsRule.flee(d)
+        return if (loadout.magnet < STRONG_MAGNET) flee * 0.7f else flee * (1.04f + 0.22f * kotlin.math.sin(s.age * 1.8f))
     }
 
     private fun eat(s: Star) {
@@ -597,13 +611,17 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     // Player
     // ----------------------------------------------------------------------------------------
 
-    fun hitPlayer() {
+    /**
+     * The player takes a hit. A [fatal] one - a black hole - goes straight through shields and any
+     * moment of invulnerability; only a Second Wind cheats it.
+     */
+    fun hitPlayer(fatal: Boolean = false) {
         val p = player
-        if (phase != Phase.PLAYING || p.invuln > 0f) return
+        if (phase != Phase.PLAYING || (p.invuln > 0f && !fatal)) return
         combo = 1
         comboTimer = 0f
         when {
-            p.shields > 0 -> {
+            p.shields > 0 && !fatal -> {
                 p.shields--
                 p.shieldRegen = 0f
                 // An arcade shield is one bubble: popped is popped.
@@ -654,8 +672,9 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             if (nx < 0f || nx >= w) { if (!playerWrapX) break; nx = Geo.wrap(nx, w); wrapped = true }
             if (ny < 0f || ny >= h) { if (!playerWrapY) break; ny = Geo.wrap(ny, h); wrapped = true }
             if (hasWalls && boxHitsWall(nx, ny, PLAYER_RADIUS * 0.85f)) break
+            // A dash goes clean through a sun, but pulls up short of a black hole.
             val centre = sun
-            if (centre != null && hypot(nx - centre.x, ny - centre.y) < centre.radius + 0.4f) break
+            if (centre != null && centre.blackHole && hypot(nx - centre.x, ny - centre.y) < centre.radius + 0.4f) break
             p.x = nx; p.y = ny
             if (loadout.dashStun) for (e in enemies) if (dist(e.x, e.y, nx, ny) < 1.1f) stun(e, 2f)
             // Hoover up anything the dash passes through.
@@ -839,6 +858,9 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         const val SHIELD_REGEN_TIME = 25f
         const val METEOR_WARN = 1.3f
         const val METEOR_SPEED = 15f
+
+        /** A star magnet at least this wide can hold its own against a shy star. */
+        const val STRONG_MAGNET = 3f
         const val FIRST_CAPSULE = 5f
         const val CAPSULE_EVERY = 11f
         const val CAPSULE_LIFE = 12f

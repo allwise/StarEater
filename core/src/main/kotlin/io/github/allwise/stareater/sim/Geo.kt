@@ -35,7 +35,7 @@ enum class MoveKind(val title: String, val blurb: String) {
     GRID("CLASSIC", "Tile by tile. One tap, one step - the original."),
     GLIDE("GLIDE", "Thrust and drift. Momentum is your friend and your enemy."),
     SCROLL("SCROLLER", "The sky streams past. The sides wrap, top and bottom do not."),
-    ORBIT("ORBIT", "Everything circles the middle. Thrust to change orbit - and do not fall in."),
+    ORBIT("ORBIT", "Everything circles the middle. Dive through a sun if you like - never into a black hole."),
 }
 
 /**

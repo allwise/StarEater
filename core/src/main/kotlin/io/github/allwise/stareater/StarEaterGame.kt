@@ -14,6 +14,7 @@ import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
+import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Enemies
@@ -57,6 +58,9 @@ class DevOptions(spec: String) {
     val arcade: Boolean = map["arcade"] == "1"
     val powers: List<String> = map["powers"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
     val align: Int = map["align"]?.toIntOrNull() ?: 0
+
+    /** Pretend every boss up to this level has been beaten (and fill a couple of saved slots). */
+    val checkpoint: Int = map["checkpoint"]?.toIntOrNull() ?: 0
 
     /** Window size as `1600x720`, for trying out screens that are not 16:9. */
     val window: Pair<Int, Int>? = map["window"]?.split('x')?.mapNotNull { it.trim().toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
@@ -124,6 +128,11 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
 
     private fun startDev(d: DevOptions) {
         if (d.dust >= 0) profile.grantDust(d.dust)
+        for (boss in 10..d.checkpoint step 10) profile.beatBoss(boss)
+        if (d.checkpoint > 0) {
+            profile.store(0, SavedLevel("STAR22", 7))
+            profile.store(2, SavedLevel("MQQN99", 14, arcade = true))
+        }
         if (d.allSkills) {
             profile.grantDust(Skill.totalCost)
             var bought = true
@@ -212,7 +221,12 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
 
     override fun pause() {
         if (::profile.isInitialized) profile.save()
+        if (::audio.isInitialized) audio.pause()
         (screen as? PlayScreen)?.pauseGame()
+    }
+
+    override fun resume() {
+        if (::audio.isInitialized) audio.resume()
     }
 
     override fun dispose() {

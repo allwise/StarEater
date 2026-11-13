@@ -83,6 +83,9 @@ class WorldRenderer(private val g: Gfx) {
     private var streakX = 0f
     private var streakY = 0f
     private var sealSlam = 0f
+
+    /** Seconds since this level's player beamed in. */
+    private var arrive = 99f
     private var world: World? = null
 
     // Camera: centre of the view in tiles, and the size of the world it is looking at.
@@ -263,6 +266,7 @@ class WorldRenderer(private val g: Gfx) {
             seedNebula(w)
             shards.clear(); bolts.clear(); pops.clear(); fireworks.clear()
             lastPop = 1
+            arrive = 0f
         }
         if (!follow) {
             camX = ww / 2f
@@ -342,6 +346,12 @@ class WorldRenderer(private val g: Gfx) {
         hudPulse = max(0f, hudPulse - dt * 4f)
         scoreBump = max(0f, scoreBump - dt * 4f)
         sealSlam = max(0f, sealSlam - dt * 2.5f)
+        // The moment the player finishes beaming in gets a little burst of its own.
+        if (world === w && arrive < ARRIVE_TIME && arrive + dt >= ARRIVE_TIME) {
+            burst(w.player.x, w.player.y, 18, Pal.CYAN, 4.5f)
+            ring(w.player.x, w.player.y, 2.4f, 0.45f, Pal.CYAN)
+        }
+        arrive += dt
         ox = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
         oy = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
         camera(w, dt)
@@ -610,20 +620,72 @@ class WorldRenderer(private val g: Gfx) {
 
     private fun wells(w: World) {
         for (well in w.wells) {
-            at(well.x, well.y, 130f) { x, y -> blackHole(x, y, 1f) }
+            val r = well.radius * T
+            at(well.x, well.y, r * 7f) { x, y -> if (well.blackHole) blackHole(x, y, r) else star(x, y, r, well.stage) }
         }
     }
 
-    private fun blackHole(x: Float, y: Float, scale: Float) {
-        g.glow(x, y, 120f * scale, Pal.PURPLE, 0.45f)
+    /**
+     * A black hole, seen from above. [r] is its event horizon in pixels, and the black disc is drawn
+     * exactly that size, because that disc is where you die. Around it: an accretion disc in broken
+     * rings, turning faster the closer in they are, and matter spiralling down the drain.
+     */
+    private fun blackHole(x: Float, y: Float, r: Float) {
+        g.glow(x, y, r * 6.5f, Pal.PURPLE, 0.4f)
+        g.glow(x, y, r * 3f, Pal.PINK, 0.25f)
         for (i in 0 until 4) {
-            // Rings fall inwards, forever.
-            val t = ((time * 0.35f + i / 4f) % 1f)
-            val r = (70f * (1f - t) + 14f) * scale
-            g.ring(x, y, r, 2.5f, Pal.PURPLE, 0.55f * t, time * 40f + i * 50f, 300f)
+            val rr = r * (1.4f + i * 0.45f)
+            val turn = time * (170f / (1f + i * 0.9f)) + i * 70f
+            val c = when (i) { 0 -> Pal.STAR; 1 -> Pal.ORANGE; 2 -> Pal.PINK; else -> Pal.PURPLE }
+            val a = 0.8f - i * 0.16f
+            g.ring(x, y, rr, 3.4f - i * 0.6f, c, a, turn, 190f - i * 25f, add = true)
+            g.ring(x, y, rr, 3.4f - i * 0.6f, c, a * 0.7f, turn + 215f, 85f - i * 10f, add = true)
         }
-        g.circle(x, y, 15f * scale, Color.BLACK)
-        g.ring(x, y, 15f * scale, 3f, Pal.PINK, 0.9f)
+        // Streaks winding inwards: slow and faint far out, quick and bright at the brink.
+        for (i in 0 until 18) {
+            val t = (time * 0.4f + i / 18f) % 1f
+            val a0 = i * 137.5f
+            val r0 = r * (1f + 4.6f * (1f - t) * (1f - t))
+            val t1 = min(1f, t + 0.05f)
+            val r1 = r * (1f + 4.6f * (1f - t1) * (1f - t1))
+            val ang0 = a0 + t * t * 560f
+            val ang1 = a0 + t1 * t1 * 560f
+            g.line(
+                x + MathUtils.cosDeg(ang0) * r0, y + MathUtils.sinDeg(ang0) * r0,
+                x + MathUtils.cosDeg(ang1) * r1, y + MathUtils.sinDeg(ang1) * r1,
+                1f + 1.8f * t, if (i % 3 == 0) Pal.WHITE else Pal.PINK, 0.15f + 0.75f * t, add = true,
+            )
+        }
+        // The horizon: nothing at all, with a hard bright rim and a hotter crescent sliding round it.
+        g.circle(x, y, r, Color.BLACK)
+        g.ring(x, y, r, 2.5f, Pal.WHITE, 0.95f)
+        g.ring(x, y, r + 2.5f, 2.5f, Pal.PINK, 0.8f, -time * 70f, 140f, add = true)
+    }
+
+    /**
+     * A sun of the given stage: a pale dwarf, a golden star, or a red giant. The redder and bigger,
+     * the harder it pulls - but none of them hurt to touch.
+     */
+    private fun star(cx: Float, cy: Float, r: Float, stage: Int) {
+        val outer = when (stage) { 1 -> Pal.GOLD; 2 -> Pal.ORANGE; else -> Pal.RED }
+        val mid = when (stage) { 1 -> Pal.STAR; 2 -> Pal.GOLD; else -> Pal.ORANGE }
+        val core = when (stage) { 1 -> Pal.WHITE; 2 -> Pal.STAR; else -> Pal.GOLD }
+        val pulse = 1f + 0.04f * MathUtils.sin(time * 3f)
+        g.glow(cx, cy, r * (4f + stage), outer, 0.5f)
+        g.glow(cx, cy, r * 3f, mid, 0.8f)
+        // Corona: flickering rays, longer and more of them on the bigger suns.
+        val rays = 10 + stage * 2
+        for (i in 0 until rays) {
+            val ang = i * (360f / rays) + time * 12f
+            val len = r * (1.25f + 0.08f * stage + 0.3f * MathUtils.sin(time * 5f + i * 1.7f))
+            g.line(
+                cx + MathUtils.cosDeg(ang) * r * 0.9f, cy + MathUtils.sinDeg(ang) * r * 0.9f,
+                cx + MathUtils.cosDeg(ang) * len, cy + MathUtils.sinDeg(ang) * len, 3f, mid, 0.7f, add = true,
+            )
+        }
+        g.circle(cx, cy, r * pulse, outer)
+        g.circle(cx, cy, r * 0.8f * pulse, mid)
+        g.circle(cx - r * 0.15f, cy + r * 0.15f, r * 0.5f, core)
     }
 
     /** The middle of an orbit level, and the tracks the stars ride around it. */
@@ -634,25 +696,7 @@ class WorldRenderer(private val g: Gfx) {
             if (star.orbitR > 0f) g.ring(cx, cy, star.orbitR * T, 1.5f, Pal.DIM, 0.16f)
         }
         val r = s.radius * T
-        if (s.blackHole) {
-            blackHole(cx, cy, r / 15f * 0.9f)
-            return
-        }
-        val pulse = 1f + 0.04f * MathUtils.sin(time * 3f)
-        g.glow(cx, cy, r * 6f, Pal.ORANGE, 0.5f)
-        g.glow(cx, cy, r * 3f, Pal.STAR, 0.8f)
-        // Corona: flickering rays.
-        for (i in 0 until 14) {
-            val ang = i * (360f / 14f) + time * 12f
-            val len = r * (1.35f + 0.3f * MathUtils.sin(time * 5f + i * 1.7f))
-            g.line(
-                cx + MathUtils.cosDeg(ang) * r * 0.9f, cy + MathUtils.sinDeg(ang) * r * 0.9f,
-                cx + MathUtils.cosDeg(ang) * len, cy + MathUtils.sinDeg(ang) * len, 3f, Pal.GOLD, 0.7f, add = true,
-            )
-        }
-        g.circle(cx, cy, r * pulse, Pal.ORANGE)
-        g.circle(cx, cy, r * 0.8f * pulse, Pal.GOLD)
-        g.circle(cx - r * 0.15f, cy + r * 0.15f, r * 0.5f, Pal.STAR)
+        if (s.blackHole) blackHole(cx, cy, r) else star(cx, cy, r, s.stage)
     }
 
     private fun tail(w: World) {
@@ -892,8 +936,26 @@ class WorldRenderer(private val g: Gfx) {
         }
         var a = 1f
         if (p.invuln > 0f && MathUtils.sin(time * 40f) < 0f) a = 0.35f
-        val gulp = 1f + 0.4f * eatPulse
+        // Beaming in at the start of a level: the o swells out of nothing, overshoots and settles.
+        val landing = (arrive / ARRIVE_TIME).coerceAtMost(1f)
+        val waiting = landing >= 1f && !p.started && w.phase == World.Phase.PLAYING && arrive < 8f
+        var gulp = 1f + 0.4f * eatPulse
+        if (landing < 1f) gulp *= 1f + 2.7f * (landing - 1f) * (landing - 1f) * (landing - 1f) + 1.7f * (landing - 1f) * (landing - 1f)
+        else if (waiting) gulp *= 1f + 0.1f * MathUtils.sin(time * 5f)
         at(bx(w, p), by(w, p), 40f) { x, y ->
+            if (landing < 1f) {
+                val k = 1f - landing
+                // A shaft of light, and rings closing in on the spot.
+                g.line(x, y, x, y + 30f + 300f * k, 3f + 16f * k, Pal.CYAN, 0.55f * k, add = true)
+                for (i in 0 until 3) g.ring(x, y, 12f + (36f + i * 30f) * k, 2.5f, Pal.CYAN, landing * 0.9f, add = true)
+                g.glow(x, y, 90f * k + 30f, Pal.CYAN, 0.8f * k)
+            } else if (waiting) {
+                // Until the first move: a ring breathing out, and a marker overhead. This one is you.
+                val t = ((arrive - ARRIVE_TIME) % 1.2f) / 1.2f
+                g.ring(x, y, 14f + 34f * t, 2f, Pal.CYAN, 0.75f * (1f - t), add = true)
+                val top = y + 26f + 4f * MathUtils.sin(time * 6f)
+                g.triangle(x - 8f, top + 11f, x + 8f, top + 11f, x, top, Pal.CYAN, 0.9f)
+            }
             g.glow(x, y, 38f + 22f * eatPulse, tint, (0.6f + 0.3f * eatPulse) * a)
             g.circle(x, y, 8.5f * gulp, Pal.BG, a)
             g.ring(x, y, 8.5f * gulp, 4.5f, Pal.PLAYER, a)
@@ -1186,6 +1248,7 @@ class WorldRenderer(private val g: Gfx) {
         const val BOSS_SCALE = 3.4f
         private const val SPECKS = 110
         private const val STREAK_TIME = 0.4f
+        private const val ARRIVE_TIME = 0.55f
         private const val NEBULAE = 6
         private const val MAX_PARTICLES = 700
         private val FOG_LIGHT = Color.valueOf("3a55a8")

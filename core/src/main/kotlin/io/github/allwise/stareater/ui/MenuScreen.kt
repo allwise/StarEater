@@ -27,6 +27,8 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
     private var bot = Bot()
     private var demo = newDemo()
 
+    private lateinit var from: Button
+
     private fun newDemo(): World {
         bot = Bot()
         val level = 1 + rng.nextInt(9)
@@ -48,8 +50,17 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
             y -= 43f
             return b
         }
-        add("PLAY") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random()))) }
-        add("ARCADE") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade = true))) }.accent = Pal.GOLD
+        val play = add("PLAY") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = game.profile.startLevel))) }
+        add("ARCADE") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade = true, level = game.profile.startLevel))) }.accent = Pal.GOLD
+        // Beating a boss opens a start on the level after it. Until then there is nothing to choose.
+        from = button(play.x + play.w + 10f, play.y, 150f, play.h, "") {
+            val p = game.profile
+            val levels = p.startLevels()
+            p.startLevel = levels[(levels.indexOf(p.startLevel) + 1) % levels.size]
+            p.save()
+        }
+        from.small = true
+        from.visible = game.profile.checkpoint > 0
         add("SEEDED RUN") { game.go(SeedScreen(game)) }
         add("SKILL TREE") { game.go(SkillScreen(game)) }
         add("HIGH SCORES") { game.go(ScoresScreen(game)) }
@@ -80,6 +91,7 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         g.star(cx - 300f, 460f + bob, 20f, 8f, 5, 90f + age * 30f, Pal.GOLD)
         g.star(cx + 300f, 460f + bob, 20f, 8f, 5, 90f - age * 30f, Pal.GOLD)
 
+        from.label = "FROM LEVEL ${game.profile.startLevel}"
         drawButtons()
 
         val p = game.profile

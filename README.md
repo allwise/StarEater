@@ -54,8 +54,9 @@ On the title screen and in the pause menu.
 
 - **Music** and **sound** volume, ten steps each (0 is off).
 - **Screen: left / centre / right.** The picture is always 16:9. On a screen wider than that, this
-  slides it to one side so the spare width ends up under one thumb: the floating stick works out in
-  the black bar, and is drawn there too, so steering never has to cover the game.
+  slides it to one side so the spare width ends up under one thumb. The bar left over is marked out
+  as a joystick pad, and the floating stick works and is drawn out there, so steering never has to
+  cover the game.
 - **Tilt steering** (phones and tablets): lean the device the way you want to go. However it is held
   when a level starts counts as level, and it re-centres after every pause. Three sensitivities. In
   classic levels a firm lean is a held direction.
@@ -67,11 +68,18 @@ On the title screen and in the pause menu.
 2. Every level after that rolls **1 to 5 rules**: one movement mode plus up to four modifiers. Early
    levels roll few rules, later levels roll more. The briefing deals them out on a **slot machine**:
    one reel for the movement mode, four for the twists, and a reel that lands on a blank is a twist
-   you were spared. One press stops the reels if you are in a hurry.
+   you were spared. The reels stop in no particular order, and one press stops them all if you are
+   in a hurry.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
 4. Eat the level's **quota** of stars to clear it. The quota grows every level.
 5. Every tenth level is a **boss**.
 6. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
+
+Every boss is a **checkpoint**: once you have beaten the one on level 10, a FROM LEVEL button
+appears next to PLAY and new runs can start on level 11 (then 21, and so on) instead of level 1.
+
+At the start of a level the `o` beams in, and wears a marker until you first move, so there is no
+doubt which thing on the screen is you.
 
 It is endless: there is no last level, only how far you got.
 
@@ -87,20 +95,31 @@ the longer you take. Across levels, all of those numbers scale up too.
 | **Scroller** | A top-down scroller. Stars stream down from the top; you fly freely but only the sides wrap. |
 | **Orbit** | A solar system. A sun (or a black hole) sits in the middle and pulls on everything, stars ride their orbits, and you coast unless you burn. The field is bigger than the screen, so the camera follows you. From level 3. |
 
+### Gravity
+
+Things that pull come in two kinds, in orbit levels and in the Gravity Wells rule alike.
+
+- **Suns** only pull. They come in three stages - a pale dwarf, a golden star, a red giant - each
+  heavier than the last (the single strength the game used to have sat between stages two and
+  three). Nothing happens if you touch one: fly straight through it.
+- **Black holes** pull about like a middling sun, and the black disc is exactly the size of the part
+  that kills. It is instant: no shield and no moment of invulnerability helps. Only a Second Wind
+  gets you thrown back out, once.
+
 ### Modifier rules
 
 | Rule | Effect | Modes |
 |---|---|---|
 | Dark Nebula | You only see what is near you. Distant stars still glimmer. | all |
 | Debris Field | Walls. Smart enemies path around them, dim ones get stuck. | classic, glide |
-| Shy Stars | Stars drift away as you approach. Cut them off with a wrap. | classic, glide |
+| Shy Stars | Stars drift away as you approach. Cut them off with a wrap. The small star magnet only slows them; the big one gets a tug-of-war. | classic, glide |
 | Fading Light | Stars burn out if you take too long. | classic, glide |
 | Swarm | Twice the enemies, each a bit slower. | all |
 | Countdown | A clock that only stars can top up. Run out and you take a hit. | all |
 | Meteor Shower | A row or column flashes, then gets flattened. Rocks stun enemies too. | all |
 | Restless | No brakes: you can steer but never stop. | classic, glide |
 | Serpent | Every star grows your tail, and biting it hurts. | classic, glide |
-| Black Hole | A gravity well drags everything towards it. | glide, scroller |
+| Gravity Wells | Suns that drag you off course and the odd black hole. One or two in glide; in the scroller up to three drift down the screen. | glide, scroller |
 | Inversion | The edges are solid for you, and open for *them*. | all |
 | Deep Space | The field is four screens big and the camera follows you. Arrows on the rim point at off-screen stars. It still wraps. | classic, glide |
 | Lights Out | Pitch black apart from a small glow around you. Every star you eat lights up its patch for a few seconds. | all |
@@ -217,13 +236,20 @@ wall layouts, where the boss is. The same key deals the same run to anyone.
   random one, and shows your best scores on it.
 - After a run, **SAME SEED** replays it.
 
+There are five **saved-level slots**, which work like the preset buttons on a car radio. They sit
+beside the button on every briefing, on the game-over screen and on the SEEDED RUN screen: press
+and hold one to store the level in hand (its seed key and level number), tap it on the SEEDED RUN
+screen to bring it back and play from that level. A level depends only on its seed and its number,
+so a saved level 17 is the same level 17 you met the first time.
+
 Scores are stored on the device only; comparing with a friend means comparing screens.
 
 ### Sound
 
 All of it is synthesised by the game at start-up: pulse, triangle, saw and noise voices in
 `core/.../audio/Synth.kt`, with the effects and the six looping tunes written as code in
-`Sounds.kt`. After a run, the title tune comes back an octave down and low-passed, as if from the
+`Sounds.kt`. Tunes are streamed from memory a block at a time rather than handed to the platform's
+music player, because that is the only way to get a loop with no hiccup at the seam on a phone. After a run, the title tune comes back an octave down and low-passed, as if from the
 next room, once the game-over jingle has had its say. There are no audio files in the repository. `./gradlew core:test` also drops every
 effect and tune as a WAV into `core/build/synth-preview/`, to listen to without launching the game.
 
@@ -317,6 +343,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `arcade=1` | Make it an arcade run |
 | `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,dash,echo,nova` |
 | `align` | Screen position: `-1` left, `0` centre, `1` right |
+| `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved slots) |
 | `window` | Window size, e.g. `1600x720`, to try screens that are not 16:9 |
 | `dust` | Starting stardust |
 | `bot=1` | Let the autopilot play |

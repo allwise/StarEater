@@ -49,17 +49,20 @@ class Bot {
             val trail = e.trail ?: continue
             for (t in trail) if (w.dist(t.x, t.y, x, y) < 1.2f) d += 3f
         }
+        // Suns are only scenery to fly through; black holes are the end.
         w.sun?.let {
-            val dist = (w.dist(it.x, it.y, x, y) - it.radius).coerceAtLeast(0f)
-            d += 3f / (dist * dist + 0.05f)
+            if (it.blackHole) {
+                val dist = (w.dist(it.x, it.y, x, y) - it.radius).coerceAtLeast(0f)
+                d += 5f / (dist * dist + 0.05f)
+            }
         }
         for (m in w.meteors) {
             val sameLine = if (m.horizontal) floor(y).toInt() == m.line else floor(x).toInt() == m.line
             if (sameLine) d += 0.6f
         }
         for (well in w.wells) {
-            val dist = w.dist(well.x, well.y, x, y)
-            d += 2f / (dist * dist + 0.05f)
+            val dist = (w.dist(well.x, well.y, x, y) - well.radius).coerceAtLeast(0f)
+            d += (if (well.blackHole) 5f else 0.2f) / (dist * dist + 0.05f)
         }
         for (i in 2 until w.tail.size) {
             val t = w.tail[i]
