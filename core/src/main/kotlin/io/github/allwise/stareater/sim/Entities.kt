@@ -63,6 +63,9 @@ class Enemy(val type: EnemyType) : Body() {
     var wraps = false
     var state = 0
     var timer = 0f
+
+    /** A second clock, for brains that are counting down to two different things. */
+    var timer2 = 0f
     var stun = 0f
 
     /** Counts down while the enemy is materialising: harmless and frozen until it hits zero. */
@@ -162,6 +165,15 @@ sealed class Fx {
     class BossDead(val x: Float, val y: Float) : Fx()
     class TimeUp : Fx()
     class Cleared : Fx()
+
+    /** Arcade mode: a power-up was collected, or one just ran out. */
+    class Powered(val x: Float, val y: Float, val kind: PowerUp) : Fx()
+    class PowerLost(val kind: PowerUp) : Fx()
+
+    /** The edge block: warning given, edges shut, edges open again. */
+    class EdgeWarn : Fx()
+    class EdgeSeal : Fx()
+    class EdgeOpen : Fx()
 }
 
 /** What the player's unlocked skills amount to inside a level. A default Loadout is the bare ship. */
@@ -191,4 +203,7 @@ class RunState(val seed: Long, val key: String = "") {
     var secondWindUsed = false
     var prevMove: MoveKind? = null
     var time = 0f
+
+    /** Set on arcade runs: no skill tree, the kit is whatever got picked up. */
+    var arcade: Arcade? = null
 }

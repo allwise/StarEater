@@ -58,7 +58,7 @@ object Rules {
         RuleInfo("gravity", "BLACK HOLE", "Something heavy is pulling everything in.", 4, FLOATY) { GravityRule() },
         RuleInfo("inversion", "INVERSION", "The edges are solid for you - and open for them.", 5, ALL_MOVES) { InversionRule() },
         RuleInfo(
-            "deep", "DEEP SPACE", "A field four screens big. It still wraps - somewhere out there.", 3, FLAT,
+            "deep", "DEEP SPACE", "Four screens of field. It still wraps - somewhere.", 3, FLAT,
             tune = {
                 it.width *= 2
                 it.height *= 2
@@ -67,7 +67,7 @@ object Rules {
                 it.enemyMax = (it.enemyMax * 1.4f).toInt() + 1
             },
         ) { object : Rule() {} },
-        RuleInfo("lightsout", "LIGHTS OUT", "Pitch black. Every star you eat lights its patch for a while.", 4, ALL_MOVES, conflicts = setOf("fog")) { LightsOutRule() },
+        RuleInfo("lightsout", "LIGHTS OUT", "Pitch black. Each star you eat lights up its patch.", 4, ALL_MOVES, conflicts = setOf("fog")) { LightsOutRule() },
     )
 
     fun byId(id: String): RuleInfo = all.first { it.id == id }

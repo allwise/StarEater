@@ -43,7 +43,7 @@ class AudioTest {
     fun everyEffectRendersToSomethingAudible() {
         for (s in Sfx.values()) {
             val pcm = Sounds.render(s).pcm()
-            assertTrue(pcm.size in 400..(Synth.RATE * 2), "${s.name}: odd length ${pcm.size}")
+            assertTrue(pcm.size in 400..(Synth.RATE * 7 / 2), "${s.name}: odd length ${pcm.size}")
             assertTrue(rms(pcm) > 0.03, "${s.name} is nearly silent")
             assertTrue(pcm.maxOf { abs(it.toInt()) } in 27000..32767, "${s.name} is not normalised")
             // Effects must not end on a click: the tail should have died away.
@@ -63,6 +63,35 @@ class AudioTest {
             for (b in 0 until 8) assertTrue(rms(pcm, b * bar, (b + 1) * bar) > 0.04, "${t.name}: bar ${b + 1} is silent")
             File(preview, "tune_${t.name.lowercase()}.wav").writeBytes(Synth.wav(pcm))
         }
+    }
+
+    /** The tune after a run is the menu's, heard through a wall: the top end should be mostly gone. */
+    @Test
+    fun theAfterTuneIsMuffled() {
+        fun brightness(pcm: ShortArray): Double {
+            // Energy of the sample-to-sample difference over energy of the signal: high for bright sounds.
+            var diff = 0.0
+            var total = 0.0
+            for (i in 1 until pcm.size) {
+                val d = (pcm[i] - pcm[i - 1]).toDouble()
+                diff += d * d
+                total += pcm[i].toDouble() * pcm[i]
+            }
+            return diff / total
+        }
+        val menu = brightness(Sounds.render(Tune.MENU).pcm(0.8f))
+        val after = brightness(Sounds.render(Tune.AFTER).pcm(0.8f))
+        assertTrue(after < menu * 0.25, "after-run tune is not dampened: $after vs $menu")
+    }
+
+    @Test
+    fun lowpassKeepsALoopSeamless() {
+        val t = Synth.song(120, listOf(Synth.Voice(Synth.Wave.SQUARE, 0.3f, Synth.bars("A3 - - - - - - - - - - - - - - -"))), emptyList())
+        val pcm = t.lowpass(800f).pcm()
+        // No jump across the loop point bigger than the jumps inside the loop.
+        var biggest = 0
+        for (i in 1 until pcm.size) biggest = maxOf(biggest, abs(pcm[i] - pcm[i - 1]))
+        assertTrue(abs(pcm[0] - pcm[pcm.size - 1]) <= biggest, "the filtered loop clicks where it wraps")
     }
 
     @Test

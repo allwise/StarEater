@@ -26,11 +26,11 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         title("HOW TO PLAY")
         val x = 50f
         val w = 500f
-        var y = 466f
+        var y = 474f
         fun section(head: String, text: String) {
             g.text(g.small, head, x, y, Pal.CYAN)
-            y -= 20f
-            y -= g.paragraph(g.tiny, text, x, y, w, Pal.TEXT) + 13f
+            y -= 19f
+            y -= g.paragraph(g.tiny, text, x, y, w, Pal.TEXT) + 9f
         }
         section("THE DEAL", "You are the o. Eat enough stars to clear the level. Everything with a letter on it wants to eat you instead.")
         section(
@@ -41,23 +41,28 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         section(
             "CONTROLS",
             if (game.keyHints) "Move: arrows or WASD.  Dash: SPACE.  Nova: E.  Pause: ESC.  Music: M.  Or drag with the mouse."
-            else "Drag anywhere to steer. In classic levels a quick tap steps once towards your finger. Tap the dials to dash or fire the nova.",
+            else "Drag anywhere to steer, or turn on tilt steering in the options. In classic levels a quick tap steps " +
+                "once towards your finger. Tap the dials to dash or fire the nova.",
         )
         section(
             "THE RUN",
-            "Level 1 is always the classic. After that each level rolls one to five rules: four ways of moving, plus twists " +
-                "like darkness, debris or a field four screens big. Every tenth level is a boss. You cannot shoot it, so " +
-                "out-eat it: each star you swallow hurts it.",
+            "Level 1 is the classic. Then a slot machine deals every level up to five rules: a way of moving plus twists " +
+                "like darkness or debris. Every tenth level is a boss. Out-eat it: each star you swallow hurts it.",
         )
         section(
             "SEEDS",
-            "Every run has a six-letter seed key, and the same key deals the same levels to anyone. Pass one to a friend " +
-                "and compare. SEEDED RUN takes a key, or plays today's.",
+            "Every run has a six-letter seed key, and the same key deals the same levels to anyone. SEEDED RUN takes a " +
+                "key, or plays today's.",
         )
         section(
             "THE LONG GAME",
             "Stardust buys permanent skills. Own the whole tree and your runs land on the MASTERED board: same kit for " +
                 "everybody, and the only thing left to upgrade is you.",
+        )
+        section(
+            "ARCADE",
+            "No skill tree: your kit is what you pick up. Power-ups are the tilted squares. Thrusters, frenzy and luck " +
+                "last the run; shield, magnet, dash and echo run on a clock; a nova is kept until fired.",
         )
 
         // Bestiary: each one as its letter (classic levels) and as the creature it becomes elsewhere.

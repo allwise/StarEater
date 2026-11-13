@@ -1,6 +1,7 @@
 package io.github.allwise.stareater
 
 import io.github.allwise.stareater.meta.Skill
+import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Bot
 import io.github.allwise.stareater.sim.Eater
 import io.github.allwise.stareater.sim.Enemies
@@ -10,9 +11,11 @@ import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.LevelSpec
 import io.github.allwise.stareater.sim.Loadout
 import io.github.allwise.stareater.sim.MoveKind
+import io.github.allwise.stareater.sim.PowerUp
 import io.github.allwise.stareater.sim.Rules
 import io.github.allwise.stareater.sim.RunState
 import io.github.allwise.stareater.sim.Stalker
+import io.github.allwise.stareater.sim.Warden
 import io.github.allwise.stareater.sim.Warper
 import io.github.allwise.stareater.sim.World
 import kotlin.random.Random
@@ -165,6 +168,14 @@ class SimTest {
                 worlds++
             }
         }
+        // Arcade runs: the same levels, but with power-ups turning up and running out.
+        for (move in MoveKind.values()) for (level in listOf(2, 9, 23)) {
+            val compatible = Rules.all.filter { move in it.moves }.map { it.id }
+            val run = RunState(level.toLong()).also { it.arcade = Arcade() }
+            val spec = LevelGen.build(level, move, compatible.shuffled(Random(level)).take(2), Enemies.roster)
+            soak(World(spec, run.arcade!!.loadout, run, level.toLong()), "arcade $move L$level")
+            worlds++
+        }
         for (boss in Enemies.bosses) for (move in listOf(MoveKind.GRID, MoveKind.GLIDE)) for (level in listOf(10, 30)) {
             val spec = LevelGen.bossLevel(level, Random(level), boss, move)
             soak(world(spec, full, seed = level.toLong()), "boss ${boss.id} $move L$level")
@@ -191,6 +202,7 @@ class SimTest {
             }
             assertTrue(w.enemies.size <= w.spec.enemyMax + 8, "$label: enemy count ran away (${w.enemies.size})")
             assertTrue(w.stars.size <= 40, "$label: star count ran away (${w.stars.size})")
+            assertTrue(w.capsules.size <= World.MAX_CAPSULES, "$label: power-ups piled up (${w.capsules.size})")
             w.fx.clear()
         }
     }
@@ -274,5 +286,143 @@ class SimTest {
         assertEquals(World.Phase.CLEARED, w.phase)
         assertEquals(null, w.boss)
         assertTrue(w.enemies.none { it.type.boss })
+    }
+
+    private fun arcadeWorld(spec: LevelSpec, seed: Long = 1L): World {
+        val run = RunState(seed).also { it.arcade = Arcade() }
+        return World(spec, run.arcade!!.loadout, run, seed)
+    }
+
+    @Test
+    fun arcadePowerUpsTurnUpAndGetCollected() {
+        val w = arcadeWorld(LevelGen.build(3, MoveKind.GRID, emptyList(), listOf(Eater)))
+        val input = InputState()
+        input.taps += io.github.allwise.stareater.sim.Dir.RIGHT // the clocks only run once you have moved
+        var frames = 0
+        while (w.capsules.isEmpty() && frames++ < 60 * 30) {
+            w.enemies.clear()
+            w.stars.clear()
+            w.update(1f / 60f, input)
+            input.clearEdges()
+        }
+        assertTrue(w.capsules.isNotEmpty(), "no power-up turned up in thirty seconds")
+        val c = w.capsules.first()
+        assertTrue(!w.isWallAt(c.x, c.y))
+        w.player.place(c.x, c.y)
+        w.enemies.clear()
+        w.fx.clear()
+        w.update(1f / 60f, input)
+        assertTrue(w.arcade!!.active(c.kind), "${c.kind} was not granted")
+        assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.Powered })
+
+        // A normal run never sees one.
+        val plain = world(LevelGen.build(3, MoveKind.GRID, emptyList(), listOf(Eater)))
+        repeat(60 * 30) { plain.enemies.clear(); plain.stars.clear(); plain.update(1f / 60f, input) }
+        assertTrue(plain.capsules.isEmpty())
+    }
+
+    @Test
+    fun arcadeSpeedStaysButTheShieldRunsOut() {
+        val a = Arcade()
+        a.grant(PowerUp.SPEED)
+        a.grant(PowerUp.SPEED)
+        a.grant(PowerUp.SHIELD)
+        a.grant(PowerUp.MAGNET)
+        assertEquals(1.16f, a.loadout.speed, 0.001f)
+        assertEquals(1, a.loadout.shields)
+        assertTrue(a.loadout.magnet > 0f)
+
+        val expired = ArrayList<PowerUp>()
+        var t = 0f
+        while (t < 30f) { a.tick(0.1f) { expired += it }; t += 0.1f }
+        assertEquals(setOf(PowerUp.SHIELD, PowerUp.MAGNET), expired.toSet())
+        assertEquals(0, a.loadout.shields)
+        assertEquals(0f, a.loadout.magnet)
+        assertEquals(1.16f, a.loadout.speed, 0.001f, "permanent power-ups must not run out")
+
+        // Permanent ones stop being offered once they are maxed.
+        repeat(10) { a.grant(PowerUp.SPEED) }
+        assertEquals(PowerUp.SPEED.max, a.stacks(PowerUp.SPEED))
+        assertTrue(!a.wants(PowerUp.SPEED))
+        assertTrue(a.wants(PowerUp.SHIELD))
+    }
+
+    @Test
+    fun anArcadeShieldSoaksOneHitAndCarriesIntoTheNextLevel() {
+        val spec = LevelGen.build(3, MoveKind.GRID, emptyList(), listOf(Eater))
+        val run = RunState(1L).also { it.arcade = Arcade() }
+        run.arcade!!.grant(PowerUp.SHIELD)
+        run.arcade!!.grant(PowerUp.NOVA)
+        val w = World(spec, run.arcade!!.loadout, run, 1L)
+        assertEquals(1, w.player.shields, "a shield still running should come along to the next level")
+        assertEquals(World.NOVA_COST, w.player.novaCharge, "so should a held nova")
+        w.hitPlayer()
+        assertEquals(World.Phase.PLAYING, w.phase)
+        assertTrue(!run.arcade!!.active(PowerUp.SHIELD), "a popped shield is gone, whatever its clock said")
+        w.player.invuln = 0f
+        w.hitPlayer()
+        assertEquals(World.Phase.DEAD, w.phase)
+    }
+
+    @Test
+    fun edgeBlockWarnsThenShutsThenReopens() {
+        val w = world(LevelGen.build(1, MoveKind.GRID, emptyList(), listOf(Eater)))
+        w.enemies.clear()
+        val warper = w.spawnEnemyAt(Warper, 15.5f, 2.5f, 0f)
+        val input = InputState()
+        fun stepLeftFromTheEdge(): Float {
+            w.enemies.retainAll { it === warper }
+            warper.place(15.5f, 2.5f)
+            w.player.place(0.5f, 7.5f)
+            w.player.stepCd = 0f
+            w.player.queue.clear()
+            input.taps += io.github.allwise.stareater.sim.Dir.LEFT
+            w.update(0.016f, input)
+            input.clearEdges()
+            return w.player.x
+        }
+
+        w.sealEdges(1f, 2f)
+        assertTrue(w.sealing && !w.sealed)
+        assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.EdgeWarn })
+        assertEquals(29.5f, stepLeftFromTheEdge(), "the wrap must still work during the warning")
+
+        var guard = 0
+        while (!w.sealed && guard++ < 200) w.update(0.016f, input)
+        assertTrue(w.sealed)
+        assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.EdgeSeal })
+        assertEquals(0.5f, stepLeftFromTheEdge(), "a shut edge must stop the player")
+        assertTrue(!warper.wraps, "and it must stop the ones that know the trick")
+
+        guard = 0
+        while (w.sealing && guard++ < 400) { w.enemies.retainAll { it === warper }; warper.place(15.5f, 2.5f); w.update(0.016f, input) }
+        assertTrue(!w.sealing)
+        assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.EdgeOpen })
+        assertEquals(29.5f, stepLeftFromTheEdge(), "and the wrap must come back afterwards")
+        assertTrue(warper.wraps)
+    }
+
+    @Test
+    fun theWardenLocksTheEdgesWithFairWarning() {
+        val spec = LevelGen.bossLevel(30, Random(3), Warden, MoveKind.GLIDE)
+        val w = world(spec)
+        val boss = w.boss!!
+        val input = InputState()
+        var warned = -1f
+        var shut = -1f
+        var frames = 0
+        while (shut < 0f && frames++ < 60 * 40) {
+            boss.place(2f, 2f)
+            w.enemies.retainAll { it === boss }
+            w.meteors.clear()
+            w.stars.clear()
+            w.player.place(20f, 10f)
+            w.player.invuln = 1f
+            w.update(1f / 60f, input)
+            if (warned < 0f && w.sealing) warned = w.time
+            if (w.sealed) shut = w.time
+        }
+        assertTrue(warned > 0f, "the Warden never tried to lock the edges")
+        assertTrue(shut - warned >= 2f, "only ${shut - warned}s of warning before the edges shut")
     }
 }

@@ -107,4 +107,50 @@ class MetaTest {
         val reloaded = Profile(p.let { MemoryStore() }.also { store -> p.copyInto(store) })
         assertEquals(listOf("BBB", "AAA"), reloaded.seedScores("STAR22").map { it.name })
     }
+
+    @Test
+    fun arcadeRunsHaveABoardOfTheirOwn() {
+        val p = Profile(MemoryStore())
+        p.addScore("AAA", 5000, 8, false, 1L, "STAR22")
+        p.addScore("ARC", 9000, 9, false, 2L, "STAR22", arcade = true)
+        p.addScore("BBB", 2000, 4, true, 3L)
+        assertEquals(listOf("AAA", "BBB"), p.topScores(false).map { it.name })
+        assertEquals(listOf("BBB"), p.topScores(true).map { it.name })
+        assertEquals(listOf("AAA"), p.seedScores("STAR22").map { it.name })
+        assertEquals(listOf("ARC"), p.arcadeScores().map { it.name })
+        // An arcade score is ranked against arcade scores only, and the other way round.
+        assertEquals(1, p.rankFor(6000))
+        assertEquals(2, p.rankFor(6000, arcade = true))
+        assertEquals(1, p.rankFor(9500, arcade = true))
+
+        val reloaded = Profile(MemoryStore().also { p.copyInto(it) })
+        assertEquals(listOf("ARC"), reloaded.arcadeScores().map { it.name })
+        assertEquals(listOf("AAA", "BBB"), reloaded.topScores(false).map { it.name })
+        assertTrue(SeedKey.newRun("STAR22", arcade = true).arcade != null)
+        assertTrue(SeedKey.newRun("STAR22").arcade == null)
+    }
+
+    @Test
+    fun settingsSurviveAReload() {
+        val store = MemoryStore()
+        val a = Profile(store)
+        assertEquals(Profile.VOLUME_DEFAULT, a.musicVol)
+        assertEquals(0, a.screenAlign)
+        assertFalse(a.tilt)
+        a.musicVol = 3
+        a.sfxVol = 99 // clamped
+        a.screenAlign = -1
+        a.tilt = true
+        a.tiltSens = 2
+        a.haptics = false
+        a.save()
+
+        val b = Profile(store)
+        assertEquals(3, b.musicVol)
+        assertEquals(Profile.VOLUME_MAX, b.sfxVol)
+        assertEquals(-1, b.screenAlign)
+        assertTrue(b.tilt)
+        assertEquals(2, b.tiltSens)
+        assertFalse(b.haptics)
+    }
 }

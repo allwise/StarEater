@@ -13,7 +13,8 @@ object Lwjgl3Launcher {
         val dev = System.getProperty("stareater.demo")?.takeIf { it.isNotBlank() }?.let { DevOptions(it) }
         val config = Lwjgl3ApplicationConfiguration().apply {
             setTitle("Star Eater")
-            setWindowedMode(1280, 720)
+            setWindowIcon("icons/icon128.png", "icons/icon32.png", "icons/icon16.png")
+            setWindowedMode(dev?.window?.first ?: 1280, dev?.window?.second ?: 720)
             setWindowSizeLimits(640, 360, -1, -1)
             useVsync(true)
             setForegroundFPS(Lwjgl3ApplicationConfiguration.getDisplayMode().refreshRate.coerceAtLeast(60))

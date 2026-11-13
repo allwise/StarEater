@@ -75,6 +75,11 @@ class Bot {
             val d = hypot(w.dx(x, s.x, w.playerWrapX), w.dy(y, s.y, w.playerWrapY))
             if (d < best) best = d
         }
+        // A power-up is worth a small detour.
+        for (c in w.capsules) {
+            val d = hypot(w.dx(x, c.x, w.playerWrapX), w.dy(y, c.y, w.playerWrapY)) - 1.5f
+            if (d < best) best = d
+        }
         return best
     }
 

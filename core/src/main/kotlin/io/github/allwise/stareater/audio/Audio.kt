@@ -25,6 +25,11 @@ class Audio(private val profile: Profile) : Disposable {
     private var clock = 0f
     private var available = false
 
+    /** Seconds before the wanted tune may start, and how far through its fade-in the current one is. */
+    private var delay = 0f
+    private var fadeIn = 0f
+    private var fade = 1f
+
     fun load() {
         try {
             val d = if (Gdx.app.type == Application.ApplicationType.Desktop) Gdx.files.external(".stareater/audio") else Gdx.files.local("audio")
@@ -60,25 +65,51 @@ class Audio(private val profile: Profile) : Disposable {
 
     fun update(dt: Float) {
         clock += dt
+        if (delay > 0f) {
+            delay -= dt
+            if (delay <= 0f) apply()
+        }
+        if (fade < 1f) {
+            fade = minOf(1f, fade + dt / fadeIn.coerceAtLeast(0.01f))
+            music?.volume = musicVolume()
+        }
     }
 
     /** @param pitch playback speed, 0.5 to 2 */
     fun play(s: Sfx, pitch: Float = 1f, volume: Float = 1f) {
-        if (!available || !profile.sfxOn) return
+        if (!available || !profile.sfxOn || profile.sfxVol <= 0) return
         // The same effect many times in one instant (a blast stunning a whole swarm) is just noise.
         if (clock - lastPlayed[s.ordinal] < 0.04f) return
         lastPlayed[s.ordinal] = clock
-        sounds[s]?.play(s.gain * volume, pitch.coerceIn(0.5f, 2f), 0f)
+        val level = s.gain * volume * profile.sfxVol / Profile.VOLUME_DEFAULT
+        sounds[s]?.play(level.coerceAtMost(1f), pitch.coerceIn(0.5f, 2f), 0f)
     }
 
-    /** Switches the looping tune; null for silence. Asking for the tune already playing does nothing. */
-    fun tune(t: Tune?) {
+    /**
+     * Switches the looping tune; null for silence. Asking for the tune already playing does nothing.
+     * With [after], whatever is playing stops now and the new tune only starts that many seconds
+     * later (room for a jingle); with [fadeIn] it creeps in over that long instead of just starting.
+     */
+    fun tune(t: Tune?, after: Float = 0f, fadeIn: Float = 0f) {
         wanted = t
+        delay = after
+        this.fadeIn = fadeIn
         apply()
     }
 
+    private fun musicVolume(): Float {
+        val gain = playing?.gain ?: 1f
+        return (MUSIC_VOLUME * gain * fade * profile.musicVol / Profile.VOLUME_DEFAULT).coerceIn(0f, 1f)
+    }
+
+    /** Call after changing a volume in the profile, so the tune that is playing follows it. */
+    fun volumeChanged() {
+        apply()
+        music?.volume = musicVolume()
+    }
+
     private fun apply() {
-        val target = if (profile.musicOn) wanted else null
+        val target = if (profile.musicOn && profile.musicVol > 0 && delay <= 0f) wanted else null
         if (target == playing) return
         music?.let { it.stop(); it.dispose() }
         music = null
@@ -86,13 +117,15 @@ class Audio(private val profile: Profile) : Disposable {
         if (target == null || !available) return
         try {
             val file = ensure(target) ?: return
+            playing = target
+            fade = if (fadeIn > 0f) 0f else 1f
             music = Gdx.audio.newMusic(file).apply {
                 isLooping = true
-                volume = MUSIC_VOLUME
+                volume = musicVolume()
                 play()
             }
-            playing = target
         } catch (e: Exception) {
+            playing = null
             Gdx.app.error("audio", "Could not play ${target.name}: ${e.message}")
         }
     }
@@ -115,6 +148,7 @@ class Audio(private val profile: Profile) : Disposable {
     }
 
     companion object {
+        /** Music level at the default volume setting. */
         private const val MUSIC_VOLUME = 0.45f
 
         /** Steps up a major scale, one per combo level, topping out an octave above the base note. */

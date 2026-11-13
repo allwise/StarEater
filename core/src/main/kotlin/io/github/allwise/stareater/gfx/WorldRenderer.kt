@@ -4,8 +4,10 @@ import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.MathUtils
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.meta.SeedKey
+import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Body
 import io.github.allwise.stareater.sim.Bouncer
+import io.github.allwise.stareater.sim.Capsule
 import io.github.allwise.stareater.sim.Devourer
 import io.github.allwise.stareater.sim.Eater
 import io.github.allwise.stareater.sim.Enemy
@@ -17,6 +19,7 @@ import io.github.allwise.stareater.sim.Leviathan
 import io.github.allwise.stareater.sim.LevelSpec
 import io.github.allwise.stareater.sim.Mite
 import io.github.allwise.stareater.sim.MoveKind
+import io.github.allwise.stareater.sim.PowerUp
 import io.github.allwise.stareater.sim.Rules
 import io.github.allwise.stareater.sim.Stalker
 import io.github.allwise.stareater.sim.Star
@@ -50,6 +53,7 @@ class WorldRenderer(private val g: Gfx) {
     private class Firework(val x: Float, val y: Float, var delay: Float, val color: Color)
 
     private val creatures = Creatures(g)
+    private val powerArt = PowerArt(g)
     private val particles = ArrayList<Particle>()
     private val rings = ArrayList<Ring>()
     private val floaters = ArrayList<Floater>()
@@ -78,6 +82,7 @@ class WorldRenderer(private val g: Gfx) {
     private var streakAge = 1f
     private var streakX = 0f
     private var streakY = 0f
+    private var sealSlam = 0f
     private var world: World? = null
 
     // Camera: centre of the view in tiles, and the size of the world it is looking at.
@@ -188,6 +193,33 @@ class WorldRenderer(private val g: Gfx) {
                 burst(p.x, p.y, 40, Pal.STAR, 7f)
                 ring(p.x, p.y, 8f, 0.7f, Pal.STAR)
                 repeat(7) { fireworks += Firework(p.x + rnd.nextFloat() * 16f - 8f, p.y + rnd.nextFloat() * 8f - 4f, 0.12f + 0.18f * it, PARTY[it % PARTY.size]) }
+            }
+            is Fx.Powered -> {
+                val c = PowerArt.color(e.kind)
+                burst(e.x, e.y, 26, c, 6f)
+                ring(e.x, e.y, 2.6f, 0.45f, c)
+                ring(e.x, e.y, 1.4f, 0.3f, Pal.WHITE)
+                flashWith(c, 0.14f)
+                val stack = w.arcade?.stacks(e.kind) ?: 0
+                pops += Pop(if (e.kind.permanent) "${e.kind.title}  x$stack" else e.kind.title, 1.1f, c)
+            }
+            is Fx.PowerLost -> {
+                val p = w.player
+                ring(p.x, p.y, 1.6f, 0.35f, PowerArt.color(e.kind))
+            }
+            is Fx.EdgeWarn -> {
+                flashWith(Pal.RED, 0.22f)
+                shake = max(shake, 5f)
+            }
+            is Fx.EdgeSeal -> {
+                shake = 14f
+                flashWith(Pal.ORANGE, 0.4f)
+                sealSlam = 1f
+                pops += Pop("EDGES LOCKED", 1.2f, Pal.ORANGE)
+            }
+            is Fx.EdgeOpen -> {
+                flashWith(Pal.CYAN, 0.25f)
+                pops += Pop("EDGES OPEN", 1.1f, Pal.CYAN)
             }
         }
         w.fx.clear()
@@ -309,6 +341,7 @@ class WorldRenderer(private val g: Gfx) {
         eatPulse = max(0f, eatPulse - dt * 5f)
         hudPulse = max(0f, hudPulse - dt * 4f)
         scoreBump = max(0f, scoreBump - dt * 4f)
+        sealSlam = max(0f, sealSlam - dt * 2.5f)
         ox = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
         oy = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
         camera(w, dt)
@@ -323,11 +356,13 @@ class WorldRenderer(private val g: Gfx) {
         tail(w)
         decoy(w)
         for (s in w.stars) star(w, s)
+        for (c in w.capsules) capsule(w, c)
         for (e in w.enemies) enemy(w, e, dt)
         if (w.phase != World.Phase.DEAD) player(w, dt)
         effects(dt)
         if (follow) indicators(w)
         if (flash > 0f) g.rect(0f, 0f, FIELD_W, FIELD_H, flashColor, flash)
+        if (w.sealing) sealNotice(w)
         pops(dt)
         if (dim > 0f) g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, dim)
     }
@@ -433,9 +468,12 @@ class WorldRenderer(private val g: Gfx) {
         val hpx = wh * T
         val x0 = px(0f)
         val y0 = if (wrapsY) py(0f) else oy
+        val sealing = w.sealing
         for (k in -1..1) {
             val x = x0 + k * wpx
-            if (x > -4f && x < FIELD_W + 4f) edge(w.playerWrapX, x, 0f, x, FIELD_H)
+            if (x > -70f && x < FIELD_W + 70f) {
+                if (sealing) barrier(w, x, 0f, x, FIELD_H) else edge(w.playerWrapX, x, 0f, x, FIELD_H)
+            }
         }
         if (!wrapsY) {
             edge(false, 0f, y0, FIELD_W, y0)
@@ -443,9 +481,67 @@ class WorldRenderer(private val g: Gfx) {
         } else {
             for (k in -1..1) {
                 val y = y0 + k * hpx
-                if (y > -4f && y < FIELD_H + 4f) edge(w.playerWrapY, 0f, y, FIELD_W, y)
+                if (y > -70f && y < FIELD_H + 70f) {
+                    if (sealing) barrier(w, 0f, y, FIELD_W, y) else edge(w.playerWrapY, 0f, y, FIELD_W, y)
+                }
             }
         }
+    }
+
+    /**
+     * An edge under an edge block. While the warning runs it throbs red, faster and brighter as the
+     * moment comes; once shut it is a wall of light with teeth, so there is no mistaking it for an
+     * edge you can still slip through.
+     */
+    private fun barrier(w: World, x1: Float, y1: Float, x2: Float, y2: Float) {
+        val horizontal = y1 == y2
+        if (w.sealWarn > 0f) {
+            val t = 1f - w.sealWarn / w.sealWarnTotal
+            val pulse = 0.5f + 0.5f * MathUtils.sin(time * (9f + 22f * t))
+            val a = (0.35f + 0.65f * t) * (0.35f + 0.65f * pulse)
+            g.line(x1, y1, x2, y2, 130f * (0.4f + 0.6f * t), Pal.RED, 0.10f * a)
+            g.line(x1, y1, x2, y2, 46f, Pal.RED, 0.22f * a)
+            g.line(x1, y1, x2, y2, 14f + 8f * t, Pal.ORANGE, 0.9f * a)
+            // Still open for now: keep the portal dashes under the glow.
+            edge(true, x1, y1, x2, y2)
+            return
+        }
+        val leaving = min(1f, w.sealTime / 0.8f)
+        val slam = 1f + 1.4f * sealSlam
+        g.line(x1, y1, x2, y2, 120f * slam, Pal.ORANGE, 0.10f * leaving)
+        g.line(x1, y1, x2, y2, 50f * slam, Pal.ORANGE, 0.22f * leaving)
+        g.line(x1, y1, x2, y2, 22f, Pal.RED, 0.95f * leaving)
+        g.line(x1, y1, x2, y2, 8f, Pal.STAR, leaving)
+        // Teeth marching along it, on both faces.
+        val gap = 40f
+        val crawl = (time * 30f) % gap
+        val n = ((if (horizontal) x2 - x1 else y2 - y1) / gap).toInt() + 2
+        for (i in -1 until n) {
+            val d = i * gap + crawl
+            if (horizontal) {
+                g.triangle(x1 + d - 9f, y1 + 10f, x1 + d + 9f, y1 + 10f, x1 + d, y1 + 26f, Pal.RED, leaving)
+                g.triangle(x1 + d - 9f, y1 - 10f, x1 + d + 9f, y1 - 10f, x1 + d, y1 - 26f, Pal.RED, leaving)
+            } else {
+                g.triangle(x1 + 10f, y1 + d - 9f, x1 + 10f, y1 + d + 9f, x1 + 26f, y1 + d, Pal.RED, leaving)
+                g.triangle(x1 - 10f, y1 + d - 9f, x1 - 10f, y1 + d + 9f, x1 - 26f, y1 + d, Pal.RED, leaving)
+            }
+        }
+    }
+
+    /** The edge block spelled out across the top of the field: a countdown in, then a countdown out. */
+    private fun sealNotice(w: World) {
+        val cx = FIELD_W / 2f
+        val y = FIELD_H - 34f
+        val warning = w.sealWarn > 0f
+        val c = if (warning) Pal.RED else Pal.ORANGE
+        val left = if (warning) w.sealWarn else w.sealTime
+        val frac = (if (warning) w.sealWarn / w.sealWarnTotal else w.sealTime / w.sealTotal).coerceIn(0f, 1f)
+        val blink = if (warning) 0.65f + 0.35f * MathUtils.sin(time * 18f) else 1f
+        val text = if (warning) "EDGES LOCKING IN %.1f".format(max(0f, left)) else "EDGES LOCKED  %.1f".format(max(0f, left))
+        g.rect(cx - 190f, y - 30f, 380f, 42f, Pal.BG, 0.7f)
+        g.frame(cx - 190f, y - 30f, 380f, 42f, 2f, c, blink)
+        g.text(g.body, text, cx, y + 2f, c, blink, Align.center)
+        g.rect(cx - 180f, y - 25f, 360f * frac, 5f, c, blink)
     }
 
     private fun edge(open: Boolean, x1: Float, y1: Float, x2: Float, y2: Float) {
@@ -657,6 +753,18 @@ class WorldRenderer(private val g: Gfx) {
             val dy = MathUtils.sinDeg(ang) * r
             g.line(x - dx, y - dy, x + dx, y + dy, 1.5f, c, a, add = true)
         }
+    }
+
+    /** An arcade power-up on the field. */
+    private fun capsule(w: World, c: Capsule) {
+        var a = max(vis(w, c.x, c.y), if (w.fogRadius > 0f) 0.25f else 0f)
+        a *= min(1f, c.age * 4f)
+        // Blink out over the last three seconds.
+        if (c.ttl > 0f) {
+            val left = c.ttl - c.age
+            if (left < 3f && MathUtils.sin(time * (10f + (3f - left) * 8f)) < 0f) a *= 0.3f
+        }
+        at(c.x, c.y, 50f) { x, y -> powerArt.capsule(c.kind, x, y, 15f, time + c.x, a) }
     }
 
     // ----------------------------------------------------------------------------------------
@@ -888,6 +996,7 @@ class WorldRenderer(private val g: Gfx) {
     /** Arrows on the rim of the view pointing at things worth knowing about that are off-screen. */
     private fun indicators(w: World) {
         for (s in w.stars) if (s.lit) pointer(s.x, s.y, starColor(s.type), 7f)
+        for (c in w.capsules) pointer(c.x, c.y, PowerArt.color(c.kind), 9f)
         w.boss?.let { pointer(it.x, it.y, Pal.RED, 11f) }
         w.sun?.let { pointer(it.x, it.y, Pal.GOLD, 9f) }
     }
@@ -953,9 +1062,13 @@ class WorldRenderer(private val g: Gfx) {
         val tags = StringBuilder(w.spec.move.title)
         for (m in w.spec.modifiers) tags.append("  +  ").append(Rules.byId(m).title)
         g.text(g.tiny, tags, 14f, FIELD_H + 18f, Pal.CYAN)
-        if (w.run.key.isNotEmpty()) {
-            g.text(g.tiny, "SEED ${SeedKey.pretty(w.run.key)}", 14f + g.width(g.tiny, tags) + 24f, FIELD_H + 18f, Pal.DIM, 0.8f)
+        var tx = 14f + g.width(g.tiny, tags) + 24f
+        if (w.arcade != null) {
+            g.text(g.tiny, "ARCADE", tx, FIELD_H + 18f, Pal.GOLD)
+            tx += g.width(g.tiny, "ARCADE") + 24f
         }
+        if (w.run.key.isNotEmpty()) g.text(g.tiny, "SEED ${SeedKey.pretty(w.run.key)}", tx, FIELD_H + 18f, Pal.DIM, 0.8f)
+        w.arcade?.let { kit(it) }
 
         // Middle: the quota - or, on a boss level, how much boss is left.
         val qx = 318f
@@ -1021,6 +1134,32 @@ class WorldRenderer(private val g: Gfx) {
                 g.circle(s.x, s.y, 2.5f, Pal.WHITE, 0.9f)
             }
             i--
+        }
+    }
+
+    /** Arcade mode: what you are carrying, bottom left. Timed ones wear a ring that drains. */
+    private fun kit(a: Arcade) {
+        var x = 30f
+        val y = 30f
+        for (k in PowerUp.values()) {
+            if (k == PowerUp.NOVA || !a.active(k)) continue
+            val c = PowerArt.color(k)
+            g.circle(x, y, 17f, Pal.PANEL, 0.6f)
+            if (k.timed) {
+                val left = a.left(k)
+                // Flicker for the last few seconds, so the end never comes as a surprise.
+                val fading = left < 4f && MathUtils.sin(time * 14f) < 0f
+                g.ring(x, y, 17f, 2f, Pal.LINE, 0.8f)
+                g.ring(x, y, 17f, 3.5f, c, if (fading) 0.35f else 0.95f, 90f, -360f * (left / k.seconds).coerceIn(0f, 1f))
+                powerArt.icon(k, x, y, 8f, time, if (fading) 0.45f else 1f)
+            } else {
+                g.ring(x, y, 17f, 2f, c, 0.6f)
+                powerArt.icon(k, x, y + 2f, 7f, time, 1f)
+                // One pip per stack.
+                val n = a.stacks(k)
+                for (i in 0 until n) g.rect(x - n * 3f + i * 6f + 0.5f, y - 13f, 4f, 3f, c)
+            }
+            x += 42f
         }
     }
 

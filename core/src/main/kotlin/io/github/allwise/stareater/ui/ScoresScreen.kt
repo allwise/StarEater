@@ -14,6 +14,7 @@ import io.github.allwise.stareater.meta.SeedKey
  *  - OPEN lists every run.
  *  - MASTERED only lists runs played with the whole skill tree: same kit for everyone.
  *  - SEED lists runs on one seed key: same levels for everyone.
+ *  - ARCADE lists arcade runs: no skill tree at all, only what was picked up on the way.
  */
 class ScoresScreen(game: StarEaterGame) : Screen(game) {
     private var tab = 0
@@ -22,18 +23,19 @@ class ScoresScreen(game: StarEaterGame) : Screen(game) {
     override fun show() {
         game.audio.tune(Tune.MENU)
         button(16f, Gfx.H - 50f, 110f, 36f, "BACK") { back() }.small = true
-        val w = 165f
-        val x0 = Gfx.W / 2f - (w * 3 + 20f) / 2f
+        val w = 150f
+        val x0 = Gfx.W / 2f - (w * 4 + 30f) / 2f
         tabs += button(x0, 428f, w, 38f, "OPEN") { tab = 0 }
         tabs += button(x0 + w + 10f, 428f, w, 38f, "MASTERED") { tab = 1 }.also { it.accent = Pal.GOLD }
         tabs += button(x0 + (w + 10f) * 2, 428f, w, 38f, "SEED") { tab = 2 }.also { it.accent = Pal.PINK }
+        tabs += button(x0 + (w + 10f) * 3, 428f, w, 38f, "ARCADE") { tab = 3 }.also { it.accent = Pal.GREEN }
         focus = 1
     }
 
     override fun back() = game.go(MenuScreen(game))
 
     override fun keyDown(key: Int): Boolean {
-        if (key == Keys.TAB) { tab = (tab + 1) % 3; return true }
+        if (key == Keys.TAB) { tab = (tab + 1) % tabs.size; return true }
         return super.keyDown(key)
     }
 
@@ -59,7 +61,8 @@ class ScoresScreen(game: StarEaterGame) : Screen(game) {
         val rows = when (tab) {
             0 -> p.topScores(false)
             1 -> p.topScores(true)
-            else -> p.seedScores(seed)
+            2 -> p.seedScores(seed)
+            else -> p.arcadeScores()
         }
         for ((i, e) in rows.withIndex()) {
             val y = 372f - i * 32f
@@ -76,6 +79,7 @@ class ScoresScreen(game: StarEaterGame) : Screen(game) {
             val msg = when (tab) {
                 0 -> "No scores yet. The stars are not going to eat themselves."
                 1 -> "Nobody yet. Finish the skill tree, then come and claim it."
+                3 -> "No arcade runs yet. The power-ups are just lying there."
                 else -> if (seed.isEmpty()) "Play a seeded run and its board shows up here." else "No scores on this seed yet."
             }
             g.text(g.small, msg, Gfx.W / 2f, 300f, Pal.DIM, 1f, Align.center)
@@ -83,6 +87,7 @@ class ScoresScreen(game: StarEaterGame) : Screen(game) {
         val note = when (tab) {
             0 -> "Every run counts here. A gold star marks a mastered run."
             1 -> "Full skill tree only: same kit for everyone, skill decides."
+            3 -> "Arcade runs: no skill tree, only what you picked up on the way."
             else -> if (seed.isEmpty()) "One seed key deals the same run to everyone who plays it." else "Runs on seed ${SeedKey.pretty(seed)}: the same levels for everyone. Pick another in SEEDED RUN."
         }
         g.text(g.tiny, note, Gfx.W / 2f, 28f, Pal.DIM, 1f, Align.center)

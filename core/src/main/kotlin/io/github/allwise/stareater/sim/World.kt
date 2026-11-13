@@ -31,6 +31,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     val walls = BooleanArray(cols * rows)
     val fx = ArrayList<Fx>()
     val flares = ArrayList<Flare>()
+    val capsules = ArrayList<Capsule>()
     var decoy: Decoy? = null
     var sun: Sun? = null
 
@@ -49,6 +50,30 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     /** Seconds on the Countdown clock, or negative when there is no clock. */
     var timeLeft = -1f
 
+    /** Arcade runs collect their kit off the field; null in a normal run. */
+    val arcade: Arcade? = run.arcade
+
+    // --- Edge block ------------------------------------------------------------------------
+    /** Seconds of warning left before the edges shut. */
+    var sealWarn = 0f
+        private set
+
+    /** Seconds the edges stay shut, counted once the warning is over. */
+    var sealTime = 0f
+        private set
+    var sealWarnTotal = 1f
+        private set
+    var sealTotal = 1f
+        private set
+
+    /** True while an edge block is anywhere between its first warning and reopening. */
+    val sealing: Boolean get() = sealWarn > 0f || sealTime > 0f
+
+    /** True while the edges are actually shut. */
+    val sealed: Boolean get() = sealWarn <= 0f && sealTime > 0f
+    private var openWrapX = true
+    private var openWrapY = true
+
     /** Whether the field wraps top-to-bottom at all. The scroller only wraps sideways. */
     val wrapY = spec.move != MoveKind.SCROLL
 
@@ -63,6 +88,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     var iq = spec.iqBase
     var speedMul = 1f
     private var spawnTimer = spec.spawnInterval
+    private var capsuleTimer = FIRST_CAPSULE
     private var spotX = 0.5f
     private var spotY = 0.5f
 
@@ -79,6 +105,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         if (spec.move == MoveKind.SCROLL) player.place(cols / 2 + 0.5f, 3.5f)
         else player.place(cols / 2 + 0.5f, rows / 2 + 0.5f)
         player.shields = loadout.shields
+        if (arcade?.novaHeld == true) player.novaCharge = NOVA_COST
         movement.setup(this)
         for (r in rules) r.setup(this)
         repeat(spec.starsOnField) { spawnStar(initial = true) }
@@ -117,6 +144,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             }
         }
 
+        arcade?.let { updateArcade(it, dt) }
+        updateSeal(dt)
         movement.updatePlayer(this, input, dt)
         if (input.dash) dash()
         if (input.nova) nova()
@@ -137,6 +166,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         }
 
         updateStars(dt)
+        updateCapsules(dt)
         direct(dt)
         updateEnemies(dt)
 
@@ -155,6 +185,9 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
                 enemies.remove(it)
                 boss = null
             }
+            // Whatever the boss had locked dies with it.
+            sealWarn = 0f
+            sealTime = 0f
             fx += Fx.Cleared()
         }
     }
@@ -468,7 +501,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         val e = Enemy(type)
         e.place(x, y)
         e.spawnT = warmup
-        e.wraps = type.wrapAware || enemiesWrap
+        e.wraps = (type.wrapAware || enemiesWrap) && !sealed
         e.seed = rng.nextFloat() * 100f
         type.init(this, e)
         enemies += e
@@ -573,6 +606,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             p.shields > 0 -> {
                 p.shields--
                 p.shieldRegen = 0f
+                // An arcade shield is one bubble: popped is popped.
+                if (p.shields == 0) arcade?.spend(PowerUp.SHIELD)
                 p.invuln = 1.6f
                 fx += Fx.ShieldHit(p.x, p.y)
                 shockwave(p.x, p.y, 3.5f, 1.3f)
@@ -630,6 +665,12 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
                 if (s.lit && dist(s.x, s.y, nx, ny) < PICKUP) { stars.removeAt(i); eat(s) }
                 i--
             }
+            i = capsules.size - 1
+            while (i >= 0) {
+                val c = capsules[i]
+                if (dist(c.x, c.y, nx, ny) < PICKUP) { capsules.removeAt(i); collect(c) }
+                i--
+            }
         }
         p.px = p.x; p.py = p.y; p.tween = 1f
         p.started = true
@@ -643,8 +684,143 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         val p = player
         if (!loadout.nova || p.novaCharge < NOVA_COST) return
         p.novaCharge = 0
+        arcade?.spend(PowerUp.NOVA)
         shockwave(p.x, p.y, 7.5f, 3f)
         meteors.clear()
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Edge block
+    // ----------------------------------------------------------------------------------------
+
+    /**
+     * Shuts every edge of the field: after [warn] seconds of warning nobody wraps, not you and not
+     * them, for [hold] seconds. Asking again while one is already under way does nothing.
+     */
+    fun sealEdges(warn: Float, hold: Float) {
+        if (sealing || phase != Phase.PLAYING) return
+        sealWarn = warn
+        sealWarnTotal = warn
+        sealTime = hold
+        sealTotal = hold
+        fx += Fx.EdgeWarn()
+    }
+
+    private fun updateSeal(dt: Float) {
+        if (sealWarn > 0f) {
+            sealWarn -= dt
+            if (sealWarn > 0f) return
+            sealWarn = 0f
+            openWrapX = playerWrapX
+            openWrapY = playerWrapY
+            playerWrapX = false
+            playerWrapY = false
+            for (e in enemies) e.wraps = false
+            fx += Fx.EdgeSeal()
+        } else if (sealTime > 0f) {
+            sealTime -= dt
+            if (sealTime > 0f) return
+            sealTime = 0f
+            playerWrapX = openWrapX
+            playerWrapY = openWrapY
+            for (e in enemies) e.wraps = e.type.wrapAware || enemiesWrap
+            fx += Fx.EdgeOpen()
+        }
+    }
+
+    // ----------------------------------------------------------------------------------------
+    // Arcade power-ups
+    // ----------------------------------------------------------------------------------------
+
+    private fun updateArcade(a: Arcade, dt: Float) {
+        // Like the countdown, the clocks only run once you have moved.
+        if (!player.started) return
+        a.tick(dt) { kind ->
+            if (kind == PowerUp.SHIELD) player.shields = 0
+            fx += Fx.PowerLost(kind)
+        }
+    }
+
+    private fun updateCapsules(dt: Float) {
+        val a = arcade ?: return
+        val scrolling = spec.move == MoveKind.SCROLL
+        var i = capsules.size - 1
+        while (i >= 0) {
+            val c = capsules[i]
+            c.age += dt
+            if (scrolling) c.y -= spec.scrollSpeed * dt
+            if (dist(c.x, c.y, player.x, player.y) < PICKUP) {
+                capsules.removeAt(i)
+                collect(c)
+            } else if ((c.ttl > 0f && c.age >= c.ttl) || c.y < -0.8f) {
+                capsules.removeAt(i)
+            }
+            i--
+        }
+        capsuleTimer -= dt
+        if (capsuleTimer > 0f) return
+        capsuleTimer = CAPSULE_EVERY * (0.75f + 0.5f * rng.nextFloat())
+        if (capsules.size < MAX_CAPSULES) spawnCapsule(a)
+    }
+
+    private fun spawnCapsule(a: Arcade) {
+        val kinds = PowerUp.values()
+        var total = 0f
+        for (k in kinds) total += capsuleWeight(a, k)
+        if (total <= 0f) return
+        var r = rng.nextFloat() * total
+        var kind = kinds.last { capsuleWeight(a, it) > 0f }
+        for (k in kinds) {
+            r -= capsuleWeight(a, k)
+            if (r <= 0f && capsuleWeight(a, k) > 0f) { kind = k; break }
+        }
+        val c = Capsule(kind)
+        if (spec.move == MoveKind.SCROLL) {
+            c.place(0.5f + rng.nextInt(cols), h + 0.6f)
+        } else {
+            var bx = 0.5f
+            var by = 0.5f
+            var best = -1f
+            for (attempt in 0 until 24) {
+                val cx = rng.nextInt(cols)
+                val cy = rng.nextInt(rows)
+                if (isWall(cx, cy)) continue
+                val x = cx + 0.5f
+                val y = cy + 0.5f
+                // Worth a detour, but not a trek: somewhere 5 to 11 tiles away.
+                val d = dist(x, y, player.x, player.y)
+                var score = if (d > 11f) 11f - (d - 11f) * 0.5f else d
+                val centre = sun
+                if (centre != null && dist(x, y, centre.x, centre.y) < centre.radius + 2.5f) score = -1f
+                if (score > best) { best = score; bx = x; by = y }
+                if (d in 5f..11f && score > 0f) break
+            }
+            c.place(bx, by)
+            c.ttl = CAPSULE_LIFE
+        }
+        capsules += c
+    }
+
+    private fun capsuleWeight(a: Arcade, k: PowerUp): Float = when {
+        !a.wants(k) -> 0f
+        // An echo is no use where you cannot wrap.
+        k == PowerUp.ECHO && !openToPlayer -> 0f
+        // One that is already running is only a top-up: offer it less.
+        k.timed && a.active(k) -> k.weight * 0.35f
+        else -> k.weight
+    }
+
+    private val openToPlayer: Boolean get() = if (sealing) openWrapX || openWrapY else playerWrapX || playerWrapY
+
+    private fun collect(c: Capsule) {
+        val a = arcade ?: return
+        a.grant(c.kind)
+        when (c.kind) {
+            PowerUp.SHIELD -> player.shields = 1
+            PowerUp.NOVA -> player.novaCharge = NOVA_COST
+            else -> {}
+        }
+        fx += Fx.Powered(c.x, c.y, c.kind)
     }
 
     companion object {
@@ -663,6 +839,10 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         const val SHIELD_REGEN_TIME = 25f
         const val METEOR_WARN = 1.3f
         const val METEOR_SPEED = 15f
+        const val FIRST_CAPSULE = 5f
+        const val CAPSULE_EVERY = 11f
+        const val CAPSULE_LIFE = 12f
+        const val MAX_CAPSULES = 2
         private val DIRS = Dir.values()
     }
 }

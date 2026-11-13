@@ -1,5 +1,6 @@
 package io.github.allwise.stareater.ui
 
+import com.badlogic.gdx.Gdx
 import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.StarEaterGame
@@ -20,13 +21,16 @@ import io.github.allwise.stareater.sim.World
 
 /** The game itself: one level, from first step to cleared-or-eaten. */
 class PlayScreen(game: StarEaterGame, private val run: RunState, private val spec: LevelSpec) : Screen(game) {
-    private val world = World(spec, game.profile.loadout(), run, run.seed xor (run.level * 104729L))
+    // An arcade run brings its own kit; otherwise it is whatever the skill tree has bought.
+    private val world = World(spec, run.arcade?.loadout ?: game.profile.loadout(), run, run.seed xor (run.level * 104729L))
     private val renderer = WorldRenderer(game.gfx)
     private val controls = Controls()
     private val bot: Bot? = if (game.devBot) Bot() else null
     private var paused = false
 
     private var lastTick = 0
+    private var klaxon = 0f
+    private var frameDt = 0f
 
     override fun show() {
         game.audio.tune(
@@ -38,11 +42,17 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 else -> Tune.ORBIT
             },
         )
-        controls.dashEnabled = world.loadout.dash
-        controls.novaEnabled = world.loadout.nova
-        button(Gfx.W / 2f - 140f, 250f, 280f, 44f, "RESUME") { paused = false }
-        button(Gfx.W / 2f - 140f, 196f, 280f, 44f, "END RUN") { game.go(GameOverScreen(game, run)) }
+        button(Gfx.W / 2f - 140f, 268f, 280f, 44f, "RESUME") { paused = false }
+        button(Gfx.W / 2f - 140f, 214f, 280f, 44f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(this, show = false) }) }
+        button(Gfx.W / 2f - 140f, 160f, 280f, 44f, "END RUN") { game.go(GameOverScreen(game, run)) }
     }
+
+    /** Back from the options: still paused, and whatever was changed in there now applies. */
+    override fun resume() {
+        controls.reset()
+    }
+
+    private val tilting: Boolean get() = game.profile.tilt && game.canTilt
 
     fun pauseGame() {
         if (world.phase == World.Phase.PLAYING) {
@@ -57,9 +67,19 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
 
     override fun render(dt: Float) {
         age += dt
+        frameDt = dt
         if (!paused) {
             controls.playerX = world.player.x * WorldRenderer.T
             controls.playerY = world.player.y * WorldRenderer.T
+            // In arcade mode the dash and the nova come and go with the power-ups.
+            controls.dashEnabled = world.loadout.dash
+            controls.novaEnabled = world.loadout.nova
+            if (tilting) {
+                val i = Gdx.input
+                controls.tilt(i.accelerometerX, i.accelerometerY, i.accelerometerZ, i.rotation, TILT_SENSITIVITY[game.profile.tiltSens], dt)
+            } else {
+                controls.noTilt()
+            }
             controls.update(dt)
             val input = controls.state
             bot?.drive(world, input)
@@ -70,7 +90,6 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
         renderer.draw(world, if (paused) 0f else dt)
         renderer.hud(world, game.keyHints)
-        stick()
         banner()
 
         when (world.phase) {
@@ -85,7 +104,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
 
         if (paused) {
             g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, 0.75f)
-            g.text(g.big, "PAUSED", Gfx.W / 2f, 350f, Pal.TEXT, 1f, Align.center)
+            g.text(g.big, "PAUSED", Gfx.W / 2f, 368f, Pal.TEXT, 1f, Align.center)
             drawButtons()
         }
     }
@@ -116,7 +135,23 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             is Fx.BossHit -> audio.play(Sfx.BOSS_HIT)
             is Fx.BossDead -> audio.play(Sfx.BOSS_DEAD)
             is Fx.Cleared -> audio.play(Sfx.CLEAR)
+            is Fx.Powered -> {
+                audio.play(Sfx.POWER_UP)
+                game.buzz()
+            }
+            is Fx.PowerLost -> audio.play(Sfx.POWER_DOWN)
+            is Fx.EdgeWarn -> klaxon = 0f
+            is Fx.EdgeSeal -> {
+                audio.play(Sfx.SEAL)
+                game.buzz()
+            }
+            is Fx.EdgeOpen -> audio.play(Sfx.UNSEAL)
             is Fx.StarLost, is Fx.EnemyGone -> {}
+        }
+        // The edge-block klaxon keeps honking for as long as the warning lasts.
+        if (world.sealWarn > 0f) {
+            klaxon -= frameDt
+            if (klaxon <= 0f) { klaxon = 0.9f; audio.play(Sfx.SEAL_WARN) }
         }
         // The countdown clock ticks out its last five seconds.
         if (world.timeLeft in 0f..5f) {
@@ -125,8 +160,12 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
     }
 
-    /** The floating stick, shown only while a finger (or the mouse) is down. */
-    private fun stick() {
+    /**
+     * The floating stick, shown only while a finger (or the mouse) is down. Drawn in the overlay
+     * pass because the thumb may well be out in the bar beside the picture - which is the point of
+     * being able to move the picture over.
+     */
+    override fun overlay() {
         if (!controls.stickOn || paused) return
         g.ring(controls.stickOX, controls.stickOY, Controls.STICK_RANGE, 2f, Pal.CYAN, 0.25f)
         g.circle(controls.stickX, controls.stickY, 16f, Pal.CYAN, 0.3f)
@@ -151,6 +190,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 val a = (age * 3f).coerceAtMost(1f) * 0.9f
                 g.text(g.body, spec.move.title, cx, cy + 96f, Pal.CYAN, a, Align.center)
                 val how = when {
+                    tilting -> if (spec.move == MoveKind.GRID) "tilt to step  -  this is level" else "tilt to fly  -  this is level"
                     !game.keyHints -> if (spec.move == MoveKind.GRID) "tap or drag to step" else "drag to fly"
                     spec.move == MoveKind.GRID -> "arrows / WASD: one tap, one step"
                     else -> "arrows / WASD to fly"
@@ -182,5 +222,10 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
 
     override fun mouseMoved(x: Float, y: Float) {
         if (paused) super.mouseMoved(x, y)
+    }
+
+    private companion object {
+        /** Gentle, normal, twitchy. */
+        val TILT_SENSITIVITY = floatArrayOf(0.65f, 1f, 1.6f)
     }
 }

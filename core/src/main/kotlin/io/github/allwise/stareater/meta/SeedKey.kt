@@ -1,5 +1,6 @@
 package io.github.allwise.stareater.meta
 
+import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.RunState
 import kotlin.random.Random
 
@@ -37,7 +38,9 @@ object SeedKey {
     /** `ABCDEF` -> `ABC-DEF`. */
     fun pretty(key: String): String = if (key.length == LENGTH) key.substring(0, 3) + "-" + key.substring(3) else key
 
-    fun newRun(key: String): RunState = RunState(seedOf(key), key)
+    /** A fresh run on a key. An [arcade] run carries its own kit instead of the skill tree. */
+    fun newRun(key: String, arcade: Boolean = false): RunState =
+        RunState(seedOf(key), key).also { if (arcade) it.arcade = Arcade() }
 
     private fun encode(value: Int): String {
         val sb = StringBuilder(LENGTH)

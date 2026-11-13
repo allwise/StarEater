@@ -9,14 +9,17 @@ import com.badlogic.gdx.graphics.g2d.BitmapFont
 import com.badlogic.gdx.graphics.g2d.GlyphLayout
 import com.badlogic.gdx.graphics.g2d.SpriteBatch
 import com.badlogic.gdx.graphics.g2d.freetype.FreeTypeFontGenerator
+import com.badlogic.gdx.graphics.glutils.HdpiUtils
 import com.badlogic.gdx.graphics.glutils.PixmapTextureData
 import com.badlogic.gdx.graphics.glutils.ShapeRenderer
 import com.badlogic.gdx.math.MathUtils
+import com.badlogic.gdx.math.Matrix4
 import com.badlogic.gdx.utils.Align
 import com.badlogic.gdx.utils.Disposable
 import com.badlogic.gdx.utils.viewport.FitViewport
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.min
 import kotlin.math.roundToInt
 
 object Pal {
@@ -67,6 +70,16 @@ class Gfx : Disposable {
     private var mode = NONE
     private var additive = false
 
+    /** Where the canvas sits when the window is wider than it: -1 left, 0 centre, 1 right. */
+    var align = 0
+        set(v) {
+            field = v
+            place()
+        }
+    private var screenW = 1
+    private var screenH = 1
+    private val wide = Matrix4()
+
     init {
         val size = 128
         val pm = Pixmap(size, size, Pixmap.Format.RGBA8888)
@@ -85,12 +98,26 @@ class Gfx : Disposable {
     }
 
     fun resize(width: Int, height: Int) {
+        screenW = width
+        screenH = height
         viewport.update(width, height, true)
+        place()
         // Fonts are rasterised at the real pixel size so text stays crisp on any screen.
         // (backBufferHeight / height covers high-DPI desktops, where a logical pixel is several real ones.)
         val density = Gdx.graphics.backBufferHeight.toFloat() / max(1, Gdx.graphics.height)
         val scale = max(0.5f, viewport.screenHeight / H * density)
         if (fontScale == 0f || abs(scale - fontScale) / fontScale > 0.08f) buildFonts(scale)
+    }
+
+    /** Slides the canvas along whatever spare width the window has, keeping clear of notches. */
+    private fun place() {
+        val free = screenW - viewport.screenWidth
+        if (free <= 0) return
+        viewport.screenX = when {
+            align < 0 -> min(Gdx.graphics.safeInsetLeft, free)
+            align > 0 -> max(free - Gdx.graphics.safeInsetRight, 0)
+            else -> free / 2
+        }
     }
 
     private fun buildFonts(scale: Float) {
@@ -136,6 +163,19 @@ class Gfx : Disposable {
             SHAPES -> shapes.end()
         }
         mode = NONE
+    }
+
+    /**
+     * From here until [end], draws over the whole window - the bars beside the canvas included -
+     * still in canvas coordinates. For things that follow a finger, which may well be out there.
+     */
+    fun overlay() {
+        end()
+        HdpiUtils.glViewport(0, 0, screenW, screenH)
+        val unit = W / viewport.screenWidth
+        wide.setToOrtho2D(-viewport.screenX * unit, -viewport.screenY * unit, screenW * unit, screenH * unit)
+        batch.projectionMatrix = wide
+        shapes.projectionMatrix = wide
     }
 
     private fun useShapes(add: Boolean = false) {

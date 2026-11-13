@@ -116,9 +116,14 @@ object Leviathan : BossType("leviathan", 'S', "THE LEVIATHAN", "A serpent. Its w
 }
 
 /** A giant W. Knows the wrap, and calls rocks down on wherever you are standing. */
-object Warden : BossType("warden", 'W', "THE WARDEN", "Wraps after you and calls down rocks. Every star you eat hurts it.", 0.6f, wrapAware = true) {
+object Warden : BossType("warden", 'W', "THE WARDEN", "Wraps after you, calls down rocks, and locks the edges. Every star you eat hurts it.", 0.6f, wrapAware = true) {
+    /** How long the edges flash before they shut, and how long they stay shut. */
+    const val SEAL_WARN = 2.6f
+    const val SEAL_HOLD = 6f
+
     override fun init(w: World, e: Enemy) {
         e.timer = 4f
+        e.timer2 = 8f
     }
 
     override fun think(w: World, e: Enemy, dt: Float) {
@@ -131,6 +136,13 @@ object Warden : BossType("warden", 'W', "THE WARDEN", "Wraps after you and calls
             w.callMeteor(horizontal = true, line = w.player.y.toInt())
             w.callMeteor(horizontal = false, line = w.player.x.toInt())
             w.fx += Fx.Alert(e.x, e.y)
+        }
+        // The edge block: a jailer locks the doors. Announced well ahead, so you can get clear of
+        // the rim (and of it) before the wrap stops working.
+        e.timer2 -= dt
+        if (e.timer2 <= 0f && !w.sealing) {
+            e.timer2 = (SEAL_WARN + SEAL_HOLD) + 10f / rage(w)
+            w.sealEdges(SEAL_WARN, SEAL_HOLD)
         }
     }
 }

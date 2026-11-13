@@ -11,6 +11,7 @@ import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
 import io.github.allwise.stareater.meta.Skill
+import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Bot
 import io.github.allwise.stareater.sim.InputState
 import io.github.allwise.stareater.sim.LevelGen
@@ -31,32 +32,30 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         val level = 1 + rng.nextInt(9)
         // The attract mode shows off a bit of everything, bosses included.
         val spec = if (rng.nextInt(7) == 0) LevelGen.bossLevel(10 * (1 + rng.nextInt(3)), rng) else LevelGen.generate(level, rng)
-        return World(spec, Skill.loadout(emptySet()), RunState(0), rng.nextLong())
+        // Every third demo is an arcade one, so the power-ups get shown off too.
+        val run = RunState(0)
+        if (rng.nextInt(3) == 0) run.arcade = Arcade()
+        return World(spec, run.arcade?.loadout ?: Skill.loadout(emptySet()), run, rng.nextLong())
     }
-
-    private lateinit var music: Button
-    private lateinit var sound: Button
 
     override fun show() {
         game.audio.tune(Tune.MENU)
         val w = 280f
         val x = Gfx.W / 2f - w / 2f
-        var y = 302f
-        fun add(label: String, action: () -> Unit) {
-            button(x, y, w, 40f, label, action)
-            y -= 46f
+        var y = 322f
+        fun add(label: String, action: () -> Unit): Button {
+            val b = button(x, y, w, 37f, label, action)
+            y -= 43f
+            return b
         }
         add("PLAY") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random()))) }
+        add("ARCADE") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade = true))) }.accent = Pal.GOLD
         add("SEEDED RUN") { game.go(SeedScreen(game)) }
         add("SKILL TREE") { game.go(SkillScreen(game)) }
         add("HIGH SCORES") { game.go(ScoresScreen(game)) }
         add("HOW TO PLAY") { game.go(HelpScreen(game)) }
         if (Gdx.app.type == Application.ApplicationType.Desktop) add("QUIT") { Gdx.app.exit() }
-        music = button(Gfx.W - 252f, 14f, 114f, 30f, "") { game.audio.toggleMusic() }
-        sound = button(Gfx.W - 130f, 14f, 114f, 30f, "") { game.audio.toggleSfx() }
-        music.small = true
-        sound.small = true
-        sound.silent = true
+        button(Gfx.W - 150f, 14f, 134f, 34f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game)) }) }.small = true
     }
 
     override fun back() {
@@ -75,14 +74,12 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
 
         val cx = Gfx.W / 2f
         val bob = MathUtils.sin(age * 1.6f) * 3f
-        g.glow(cx, 430f, 330f, Pal.CYAN, 0.16f)
-        g.text(g.huge, "STAR EATER", cx, 470f + bob, Pal.TEXT, 1f, Align.center)
-        g.text(g.small, "o  eats  *     E and S eat  o     the edges are a lie", cx, 388f, Pal.CYAN, 0.9f, Align.center)
-        g.star(cx - 300f, 440f + bob, 20f, 8f, 5, 90f + age * 30f, Pal.GOLD)
-        g.star(cx + 300f, 440f + bob, 20f, 8f, 5, 90f - age * 30f, Pal.GOLD)
+        g.glow(cx, 450f, 330f, Pal.CYAN, 0.16f)
+        g.text(g.huge, "STAR EATER", cx, 490f + bob, Pal.TEXT, 1f, Align.center)
+        g.text(g.small, "o  eats  *     E and S eat  o     the edges are a lie", cx, 408f, Pal.CYAN, 0.9f, Align.center)
+        g.star(cx - 300f, 460f + bob, 20f, 8f, 5, 90f + age * 30f, Pal.GOLD)
+        g.star(cx + 300f, 460f + bob, 20f, 8f, 5, 90f - age * 30f, Pal.GOLD)
 
-        music.label = if (game.profile.musicOn) "MUSIC ON" else "MUSIC OFF"
-        sound.label = if (game.profile.sfxOn) "SOUND ON" else "SOUND OFF"
         drawButtons()
 
         val p = game.profile
@@ -90,6 +87,6 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         g.text(g.body, "${p.stardust} STARDUST", 42f, 34f, Pal.STAR)
         val skills = "${p.owned.size}/${Skill.values().size} SKILLS"
         g.text(g.small, if (p.mastered) "MASTERED - $skills" else skills, 42f, 58f, if (p.mastered) Pal.GOLD else Pal.DIM)
-        if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 66f, Pal.DIM, 1f, Align.right)
+        if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 72f, Pal.DIM, 1f, Align.right)
     }
 }

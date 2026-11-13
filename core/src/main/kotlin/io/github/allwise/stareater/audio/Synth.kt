@@ -92,6 +92,21 @@ object Synth {
             return this
         }
 
+        /**
+         * Takes the top end off, as if heard through a wall. A looping track is run through once
+         * first to settle the filter, so the loop point stays seamless.
+         */
+        fun lowpass(cutoff: Float): Track {
+            val k = 1f - exp(-2f * PI.toFloat() * cutoff / RATE)
+            var y = 0f
+            if (loop) for (v in data) y += k * (v - y)
+            for (i in data.indices) {
+                y += k * (data[i] - y)
+                data[i] = y
+            }
+            return this
+        }
+
         fun mix(other: Track, gain: Float = 1f): Track {
             for (i in 0 until min(data.size, other.data.size)) data[i] += other.data[i] * gain
             return this

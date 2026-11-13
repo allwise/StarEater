@@ -15,14 +15,17 @@ import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
 import io.github.allwise.stareater.meta.Skill
+import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Enemies
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.MoveKind
+import io.github.allwise.stareater.sim.PowerUp
 import io.github.allwise.stareater.sim.RunState
 import io.github.allwise.stareater.ui.GameOverScreen
 import io.github.allwise.stareater.ui.HelpScreen
 import io.github.allwise.stareater.ui.IntroScreen
 import io.github.allwise.stareater.ui.MenuScreen
+import io.github.allwise.stareater.ui.OptionsScreen
 import io.github.allwise.stareater.ui.PlayScreen
 import io.github.allwise.stareater.ui.ScoresScreen
 import io.github.allwise.stareater.ui.Screen
@@ -51,6 +54,12 @@ class DevOptions(spec: String) {
     val allSkills: Boolean = map["skills"] == "all"
     val dust: Int = map["dust"]?.toIntOrNull() ?: -1
     val seed: Long = map["seed"]?.toLongOrNull() ?: 1L
+    val arcade: Boolean = map["arcade"] == "1"
+    val powers: List<String> = map["powers"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+    val align: Int = map["align"]?.toIntOrNull() ?: 0
+
+    /** Window size as `1600x720`, for trying out screens that are not 16:9. */
+    val window: Pair<Int, Int>? = map["window"]?.split('x')?.mapNotNull { it.trim().toIntOrNull() }?.takeIf { it.size == 2 }?.let { it[0] to it[1] }
     val shots: List<Float> = map["shots"]?.split(',')?.mapNotNull { it.trim().toFloatOrNull() } ?: emptyList()
     val out: String = map["out"] ?: "."
 }
@@ -80,11 +89,32 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
     /** True where there is a keyboard to hint at. */
     val keyHints: Boolean get() = Gdx.app.type == Application.ApplicationType.Desktop
 
+    /** True on a device that can be steered by tilting it. */
+    val canTilt: Boolean by lazy { Gdx.input.isPeripheralAvailable(Input.Peripheral.Accelerometer) }
+
+    /** True where there is a motor to tap the player's fingers with. */
+    val canBuzz: Boolean by lazy {
+        Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback) || Gdx.input.isPeripheralAvailable(Input.Peripheral.Vibrator)
+    }
+
+    /** A tiny tap through the vibration motor, where there is one and the player has not turned it off. */
+    fun buzz() {
+        if (!profile.haptics || !canBuzz) return
+        try {
+            if (Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback)) Gdx.input.vibrate(Input.VibrationType.LIGHT)
+            else Gdx.input.vibrate(12)
+        } catch (e: Exception) {
+            // No permission, no motor, an odd device: the game is fine without it.
+        }
+    }
+
     override fun create() {
         gfx = Gfx()
         gfx.resize(Gdx.graphics.width, Gdx.graphics.height)
         // Dev runs use a throwaway save so they never touch real progress.
         profile = Profile(if (dev != null) MemoryStore() else PrefsStore())
+        if (dev != null) profile.screenAlign = dev.align
+        gfx.align = profile.screenAlign
         audio = Audio(profile)
         audio.load()
         Gdx.input.inputProcessor = this
@@ -104,6 +134,9 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         }
         val run = RunState(d.seed, "DEVRUN")
         run.level = d.level
+        if (d.arcade) {
+            run.arcade = Arcade().also { a -> for (p in d.powers) PowerUp.values().firstOrNull { it.name.equals(p, true) }?.let { a.grant(it) } }
+        }
         val spec = if (d.boss != null) {
             LevelGen.bossLevel(d.level, kotlin.random.Random(d.seed), Enemies.byId(d.boss), d.move)
         } else if (d.move != null || d.mods != null || d.roster != null) {
@@ -115,6 +148,7 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
             "intro" -> go(IntroScreen(this, run, spec))
             "over" -> {
                 val over = RunState(d.seed, "STAR22")
+                if (d.arcade) over.arcade = Arcade()
                 over.level = 9; over.score = 12340; over.dust = 87f; over.starsEaten = 64; over.bestCombo = 6
                 profile.addScore("ACE", 30000, 12, true, 1L, "MQQN99")
                 profile.addScore("BOB", 9000, 6, false, 2L, "STAR22")
@@ -128,6 +162,7 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
                 go(ScoresScreen(this))
             }
             "help" -> go(HelpScreen(this))
+            "options" -> go(OptionsScreen(this) { go(MenuScreen(this)) })
             "seed" -> {
                 profile.addScore("KIM", 8200, 7, false, 1L, "STAR22")
                 profile.addScore("ACE", 15100, 11, true, 2L, "STAR22")
@@ -138,9 +173,10 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         }
     }
 
-    fun go(next: Screen) {
+    /** Switches screen. Pass [show] = false to return to a screen that is already set up. */
+    fun go(next: Screen, show: Boolean = true) {
         screen = next
-        next.show()
+        if (show) next.show() else next.resume()
     }
 
     override fun resize(width: Int, height: Int) {
@@ -154,6 +190,8 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         ScreenUtils.clear(0f, 0f, 0f, 1f)
         gfx.begin()
         screen?.render(dt)
+        gfx.overlay()
+        screen?.overlay()
         gfx.end()
         if (dev != null) devFrame(dev, dt)
     }

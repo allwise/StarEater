@@ -12,11 +12,12 @@ import io.github.allwise.stareater.audio.Synth.freq
 enum class Sfx(val gain: Float) {
     EAT(0.55f), EAT_RARE(0.5f), BLAST(0.7f), WRAP(0.4f), DASH(0.5f), SHIELD(0.7f), REVIVE(0.7f), DEATH(0.8f),
     SPAWN(0.3f), ALERT(0.45f), WARN(0.4f), STUN(0.35f), CLEAR(0.7f), BOSS_HIT(0.6f), BOSS_DEAD(0.9f),
-    BOSS_INTRO(0.7f), TICK(0.4f), GAME_OVER(0.7f), HIGH_SCORE(0.7f), UI_MOVE(0.25f), UI_OK(0.4f), UI_BUY(0.55f), UI_NO(0.45f),
+    BOSS_INTRO(0.7f), TICK(0.4f), GAME_OVER(0.7f), HIGH_SCORE(0.75f), UI_MOVE(0.25f), UI_OK(0.4f), UI_BUY(0.55f), UI_NO(0.45f),
+    UI_TICK(0.5f), REEL_STOP(0.55f), POWER_UP(0.6f), POWER_DOWN(0.4f), SEAL_WARN(0.6f), SEAL(0.85f), UNSEAL(0.5f),
 }
 
-/** The looping tunes. One per movement mode, plus the menu and the boss. */
-enum class Tune { MENU, CLASSIC, GLIDE, SCROLL, ORBIT, BOSS }
+/** The looping tunes. One per movement mode, plus the menu, the boss, and the quiet one after a run. */
+enum class Tune(val gain: Float = 1f) { MENU, CLASSIC, GLIDE, SCROLL, ORBIT, BOSS, AFTER(0.8f) }
 
 /**
  * The game's sound, written as code. Effects are little recipes of slides and noise bursts; tunes
@@ -99,11 +100,20 @@ object Sounds {
             t.tone(0.72f, 0.8f, Wave.PULSE25, freq("E4"), vol = 0.35f, decay = 2.5f, vibrato = 0.25f)
             t.tone(0.72f, 0.8f, Wave.TRI, freq("A2"), vol = 0.5f, decay = 2f)
         }
-        Sfx.HIGH_SCORE -> Track(1.5f).also { t ->
+        // The salute: the old run-up, then three full chords to land on - up a step, up a step, home.
+        Sfx.HIGH_SCORE -> Track(3.2f).also { t ->
             val notes = listOf("G5" to 0f, "C6" to 0.1f, "E6" to 0.2f, "G6" to 0.3f, "E6" to 0.5f, "G6" to 0.6f)
             for ((n, at) in notes) t.tone(at, 0.11f, Wave.PULSE25, freq(n), vol = 0.4f)
-            for (n in listOf("C6", "E6", "G6", "C7")) t.tone(0.72f, 0.7f, Wave.PULSE25, freq(n), vol = 0.2f, decay = 3f, vibrato = 0.2f)
-            t.tone(0.72f, 0.7f, Wave.TRI, freq("C3"), vol = 0.5f, decay = 2.5f)
+            t.tone(0f, 0.7f, Wave.TRI, freq("C3"), vol = 0.4f, decay = 1.5f)
+            chord(t, 0.74f, 0.27f, "Ab2", "Ab4", "C5", "Eb5", "Ab5")
+            chord(t, 1.04f, 0.27f, "Bb2", "Bb4", "D5", "F5", "Bb5")
+            chord(t, 1.34f, 1.75f, "C3", "C5", "E5", "G5", "C6", "E6", decay = 1.7f, vibrato = 0.18f)
+            // A sparkle climbing out of the last chord.
+            for ((i, n) in listOf("G6", "C7", "E7", "G7").withIndex()) {
+                t.tone(1.52f + i * 0.09f, 0.34f, Wave.PULSE12, freq(n), vol = 0.13f, decay = 7f)
+                t.tone(1.52f + i * 0.09f, 0.34f, Wave.TRI, freq(n), vol = 0.12f, decay = 7f)
+            }
+            t.echo(0.17f, 0.22f)
         }
         Sfx.UI_MOVE -> Track(0.04f).tone(0f, 0.025f, Wave.PULSE25, 880f, vol = 0.4f)
         Sfx.UI_OK -> Track(0.13f)
@@ -115,6 +125,53 @@ object Sounds {
         Sfx.UI_NO -> Track(0.16f)
             .tone(0f, 0.13f, Wave.SQUARE, 147f, vol = 0.4f)
             .tone(0f, 0.13f, Wave.SQUARE, 139f, vol = 0.3f)
+        // A soft tap, like a fingernail on wood: for wheels and reels that click past.
+        Sfx.UI_TICK -> Track(0.07f)
+            .tone(0f, 0.055f, Wave.TRI, 360f, 210f, vol = 0.6f, attack = 0.002f, decay = 55f)
+            .tone(0f, 0.012f, Wave.NOISE, 2200f, vol = 0.1f, attack = 0.001f, decay = 180f)
+        // A reel landing: a thunk with a small bell on top.
+        Sfx.REEL_STOP -> Track(0.26f)
+            .tone(0f, 0.1f, Wave.TRI, 190f, 85f, vol = 0.6f, decay = 22f)
+            .tone(0f, 0.02f, Wave.NOISE, 3000f, vol = 0.18f, decay = 120f)
+            .tone(0.01f, 0.22f, Wave.TRI, freq("E5"), vol = 0.3f, decay = 12f)
+            .tone(0.01f, 0.22f, Wave.PULSE12, freq("E6"), vol = 0.08f, decay = 16f)
+        Sfx.POWER_UP -> Track(0.6f).also { t ->
+            t.tone(0f, 0.16f, Wave.SAW, 260f, 1040f, vol = 0.3f)
+            t.tone(0f, 0.16f, Wave.TRI, 130f, 520f, vol = 0.35f)
+            for ((i, n) in listOf("G5", "B5", "D6", "G6").withIndex()) {
+                t.tone(0.14f + i * 0.035f, 0.38f, Wave.PULSE25, freq(n), vol = 0.2f, decay = 7f, vibrato = 0.12f)
+            }
+        }
+        Sfx.POWER_DOWN -> Track(0.34f)
+            .tone(0f, 0.12f, Wave.TRI, freq("E5"), vol = 0.5f, decay = 6f)
+            .tone(0.12f, 0.2f, Wave.TRI, freq("B4"), freq("A4"), vol = 0.5f, decay = 9f)
+        // A klaxon: three two-tone honks. Meant to be impossible to miss.
+        Sfx.SEAL_WARN -> Track(0.72f).also { t ->
+            for (i in 0 until 3) {
+                t.tone(i * 0.24f, 0.11f, Wave.SAW, 587f, vol = 0.4f)
+                t.tone(i * 0.24f, 0.11f, Wave.SQUARE, 293.5f, vol = 0.25f)
+                t.tone(i * 0.24f + 0.11f, 0.1f, Wave.SAW, 440f, vol = 0.4f)
+                t.tone(i * 0.24f + 0.11f, 0.1f, Wave.SQUARE, 220f, vol = 0.25f)
+            }
+        }
+        // The doors slamming: a heavy clang.
+        Sfx.SEAL -> Track(0.9f)
+            .tone(0f, 0.12f, Wave.NOISE, 7000f, 900f, vol = 0.6f, decay = 18f)
+            .tone(0f, 0.5f, Wave.SQUARE, 110f, 52f, vol = 0.5f, decay = 6f)
+            .tone(0f, 0.8f, Wave.PULSE12, 311f, vol = 0.22f, decay = 5f)
+            .tone(0f, 0.8f, Wave.PULSE12, 466f, vol = 0.18f, decay = 6f)
+            .tone(0f, 0.8f, Wave.TRI, 55f, vol = 0.5f, decay = 4f)
+        Sfx.UNSEAL -> Track(0.4f)
+            .tone(0f, 0.3f, Wave.TRI, 220f, 880f, vol = 0.5f, decay = 4f)
+            .tone(0f, 0.3f, Wave.NOISE, 1500f, 9000f, vol = 0.2f, decay = 6f)
+            .tone(0.22f, 0.16f, Wave.PULSE25, freq("E6"), vol = 0.25f, decay = 14f)
+    }
+
+    /** A bass note plus a stack of pulse voices, for the jingles. */
+    private fun chord(t: Track, at: Float, dur: Float, bass: String, vararg notes: String, decay: Float = 0f, vibrato: Float = 0f) {
+        for (n in notes) t.tone(at, dur, Wave.PULSE25, freq(n), vol = 0.17f, decay = decay, vibrato = vibrato)
+        t.tone(at, dur, Wave.TRI, freq(bass), vol = 0.5f, decay = decay)
+        t.tone(at, dur, Wave.TRI, freq(bass) * 2f, vol = 0.25f, decay = decay)
     }
 
     // --- Tunes -------------------------------------------------------------------------------
@@ -273,6 +330,30 @@ object Sounds {
                 ),
                 drums("K . K . S . K K . K K . S . S S"),
             )
+        }
+        // After the run: the title tune's chords again, an octave down, slower, no drums, and with
+        // the top taken off - the same place, heard from the next room.
+        Tune.AFTER -> {
+            val chords = arrayOf("Am", "F", "C", "G", "Am", "F", "C", "G")
+            val lead = bars(
+                "E4 - - - - - C4 - A3 - - - - - - -",
+                "F4 - - - - - E4 - C4 - - - A3 - - -",
+                "G4 - - - - - E4 - C4 - - - - - D4 -",
+                "D4 - - - B3 - - - G3 - - - - - - -",
+                "A4 - - - - - E4 - C4 - - - E4 - - -",
+                "A4 - - - G4 - F4 - - - C4 - - - - -",
+                "E4 - - - G4 - - - C5 - - - B4 - G4 -",
+                "D4 - - - G4 - - - B4 - - - G4 - - -",
+            )
+            Synth.song(
+                80,
+                listOf(
+                    Voice(Wave.TRI, 0.3f, lead, decay = 0.9f, vibrato = 0.15f, wet = true),
+                    Voice(Wave.PULSE25, 0.05f, arps(3, SLOW, *chords), decay = 5f, wet = true),
+                    Voice(Wave.TRI, 0.3f, basses(2, LONG, *chords)),
+                ),
+                emptyList(),
+            ).lowpass(1300f).lowpass(2200f)
         }
     }
 }
