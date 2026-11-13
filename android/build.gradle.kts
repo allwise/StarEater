@@ -53,17 +53,24 @@ dependencies {
     }
 }
 
-val copyAndroidNatives by tasks.registering {
-    val jars = natives
-    val libsDir = layout.projectDirectory.dir("libs")
-    inputs.files(jars)
-    outputs.dir(libsDir)
-    doLast {
+abstract class CopyAndroidNatives @Inject constructor(
+    private val archives: ArchiveOperations,
+    private val fs: FileSystemOperations,
+) : DefaultTask() {
+    @get:InputFiles
+    @get:PathSensitive(PathSensitivity.NAME_ONLY)
+    abstract val jars: ConfigurableFileCollection
+
+    @get:OutputDirectory
+    abstract val libsDir: DirectoryProperty
+
+    @TaskAction
+    fun unpack() {
         jars.files.forEach { jar ->
             // e.g. gdx-platform-1.14.2-natives-arm64-v8a.jar -> libs/arm64-v8a/
             val abi = jar.name.substringAfter("natives-").removeSuffix(".jar")
-            copy {
-                from(zipTree(jar))
+            fs.copy {
+                from(archives.zipTree(jar))
                 into(libsDir.dir(abi))
                 include("*.so")
             }
@@ -71,6 +78,26 @@ val copyAndroidNatives by tasks.registering {
     }
 }
 
+val copyAndroidNatives by tasks.registering(CopyAndroidNatives::class) {
+    jars.from(natives)
+    libsDir.set(layout.projectDirectory.dir("libs"))
+}
+
 tasks.matching { it.name.contains("merge") && it.name.contains("JniLibFolders") }.configureEach {
     dependsOn(copyAndroidNatives)
+}
+
+// Keep the latest debug APK in the project root for easy transfer to a phone.
+val copyDebugApk by tasks.registering {
+    val apk = layout.buildDirectory.file("outputs/apk/debug/android-debug.apk")
+    val target = rootProject.layout.projectDirectory.file("StarEater-debug.apk")
+    inputs.file(apk)
+    outputs.file(target)
+    doLast {
+        apk.get().asFile.copyTo(target.asFile, overwrite = true)
+    }
+}
+
+tasks.matching { it.name == "assembleDebug" }.configureEach {
+    finalizedBy(copyDebugApk)
 }
