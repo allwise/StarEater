@@ -1,6 +1,7 @@
 package io.github.allwise.stareater.ui
 
 import com.badlogic.gdx.Gdx
+import com.badlogic.gdx.Input
 import com.badlogic.gdx.Input.Keys
 import com.badlogic.gdx.utils.Align
 import io.github.allwise.stareater.StarEaterGame
@@ -76,7 +77,10 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             controls.novaEnabled = world.loadout.nova
             if (tilting) {
                 val i = Gdx.input
-                controls.tilt(i.accelerometerX, i.accelerometerY, i.accelerometerZ, i.rotation, TILT_SENSITIVITY[game.profile.tiltSens], dt)
+                // libGDX reports the sensor in a phone's axes on every device: on one whose natural way
+                // up is landscape (most tablets) it turns the reading a quarter, so do the same here.
+                val turn = if (i.nativeOrientation == Input.Orientation.Landscape) 90 else 0
+                controls.tilt(i.accelerometerX, i.accelerometerY, i.accelerometerZ, (i.rotation + turn) % 360, TILT_SENSITIVITY[game.profile.tiltSens], dt)
             } else {
                 controls.noTilt()
             }

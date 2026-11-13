@@ -128,7 +128,7 @@ class Controls {
 
     /**
      * Feeds in one accelerometer reading, in the device's own axes as libGDX reports them (m/s²).
-     * @param rotation how far the display is turned from the device's natural way up: 0, 90, 180 or 270
+     * @param rotation how far the display is turned from a phone's natural (portrait) way up: 0, 90, 180 or 270
      * @param sensitivity 1 is normal; higher needs less of a lean
      */
     fun tilt(ax: Float, ay: Float, az: Float, rotation: Int, sensitivity: Float, dt: Float) {
