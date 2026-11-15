@@ -16,12 +16,6 @@ class MemoryStore : KeyValueStore {
     override fun flush() {}
 }
 
-/** A level put by for later: a seed key and how far into it. Five of these fit in the profile. */
-class SavedLevel(val key: String, val level: Int, val arcade: Boolean = false) {
-    /** `STA-R22 LV7`, with an `A` on the end for an arcade run. */
-    val label: String get() = "${SeedKey.pretty(key)} LV$level" + (if (arcade) " A" else "")
-}
-
 class ScoreEntry(
     val name: String, val score: Int, val level: Int, val mastered: Boolean, val epochMs: Long,
     val seed: String = "",
@@ -70,8 +64,11 @@ class Profile(private val store: KeyValueStore) {
     var startLevel = 1
         set(v) { field = if (v in startLevels()) v else 1 }
 
-    /** Five slots, like the preset buttons on a car radio: hold one to store, tap it to recall. */
-    val saved = arrayOfNulls<SavedLevel>(SAVE_SLOTS)
+    /**
+     * Five seed keys kept for coming back to, in slots that work like the preset buttons on a car
+     * radio: hold one to store, tap it to recall.
+     */
+    val saved = arrayOfNulls<String>(SAVE_SLOTS)
     val owned: MutableSet<Skill> = LinkedHashSet()
     private val scores = ArrayList<ScoreEntry>()
 
@@ -95,9 +92,9 @@ class Profile(private val store: KeyValueStore) {
         checkpoint = (store.get(K_CHECKPOINT)?.toIntOrNull() ?: 0).coerceAtLeast(0)
         startLevel = store.get(K_START)?.toIntOrNull() ?: 1
         store.get(K_SAVED)?.split(',')?.forEachIndexed { i, text ->
-            val f = text.split(':')
-            val level = f.getOrNull(1)?.toIntOrNull()
-            if (i < SAVE_SLOTS && level != null && level >= 1 && SeedKey.isValid(f[0])) saved[i] = SavedLevel(f[0], level, f.getOrNull(2) == "A")
+            // (An earlier version also wrote a level after a colon; only the key is kept now.)
+            val key = text.substringBefore(':')
+            if (i < SAVE_SLOTS && SeedKey.isValid(key)) saved[i] = key
         }
         store.get(K_SKILLS)?.split(',')?.forEach { id ->
             Skill.values().firstOrNull { it.name == id }?.let { owned += it }
@@ -150,8 +147,8 @@ class Profile(private val store: KeyValueStore) {
         return level + 1
     }
 
-    fun store(slot: Int, level: SavedLevel) {
-        saved[slot] = level
+    fun store(slot: Int, key: String) {
+        saved[slot] = key
         save()
     }
 
@@ -253,7 +250,7 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_HAPTICS, if (haptics) "1" else "0")
         store.put(K_CHECKPOINT, checkpoint.toString())
         store.put(K_START, startLevel.toString())
-        store.put(K_SAVED, saved.joinToString(",") { if (it == null) "" else "${it.key}:${it.level}:${if (it.arcade) "A" else ""}" })
+        store.put(K_SAVED, saved.joinToString(",") { it ?: "" })
         store.put(K_SKILLS, owned.joinToString(",") { it.name })
         store.put(K_SCORES, scores.joinToString("\n") { "${it.name}|${it.score}|${it.level}|${if (it.mastered) 1 else 0}|${it.epochMs}|${it.seed}|${if (it.arcade) 1 else 0}" })
         store.flush()
@@ -269,7 +266,7 @@ class Profile(private val store: KeyValueStore) {
         const val CHECKPOINT_EVERY = 10
         private const val K_CHECKPOINT = "checkpoint"
         private const val K_START = "startLevel"
-        private const val K_SAVED = "savedLevels"
+        private const val K_SAVED = "savedLevels" // the name is from when a level was kept as well
         private const val K_MUSIC_VOL = "musicVol"
         private const val K_SFX_VOL = "sfxVol"
         private const val K_ALIGN = "screenAlign"

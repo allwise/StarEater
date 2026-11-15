@@ -6,22 +6,22 @@ import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.meta.Profile
-import io.github.allwise.stareater.meta.SavedLevel
+import io.github.allwise.stareater.meta.SeedKey
 
 /**
- * The five saved-level slots, as a row of buttons a screen can drop in. They work like the presets
- * on a car radio: press and hold one to store the level in hand, tap it to recall what it holds.
+ * The five saved-seed slots, as a row of buttons a screen can drop in. They work like the presets
+ * on a car radio: press and hold one to store the seed in hand, tap it to recall what it holds.
  *
  * @param wide wide slots spell out what they hold; narrow ones are just numbered squares
- * @param current the level that holding a slot would store, or null if there is nothing to store
+ * @param current the seed key that holding a slot would store, or null if there is nothing to store
  * @param recall what a tap on a filled slot does; when null a tap just says what is in there
  */
 class SavedSlots(
     private val screen: Screen,
     private val game: StarEaterGame,
     x: Float, y: Float, private val wide: Boolean,
-    private val current: () -> SavedLevel?,
-    private val recall: ((SavedLevel) -> Unit)? = null,
+    private val current: () -> String?,
+    private val recall: ((String) -> Unit)? = null,
 ) {
     val buttons = ArrayList<Button>()
     private var note = ""
@@ -44,16 +44,16 @@ class SavedSlots(
     }
 
     private fun store(i: Int) {
-        val level = current()
-        if (level == null) {
+        val key = current()
+        if (key == null) {
             game.audio.play(Sfx.UI_NO)
             say("NOTHING TO STORE HERE")
             return
         }
-        game.profile.store(i, level)
+        game.profile.store(i, key)
         game.audio.play(Sfx.UI_BUY)
         game.buzz()
-        say("SLOT ${i + 1} NOW HOLDS ${level.label}")
+        say("SLOT ${i + 1} NOW HOLDS ${SeedKey.pretty(key)}")
     }
 
     private fun tap(i: Int) {
@@ -69,7 +69,7 @@ class SavedSlots(
             }
             else -> {
                 game.audio.play(Sfx.UI_TICK)
-                say("SLOT ${i + 1}: ${held.label}" + (if (current() == null) "" else " - HOLD TO REPLACE"))
+                say("SLOT ${i + 1}: ${SeedKey.pretty(held)}" + (if (current() == null) "" else " - HOLD TO REPLACE"))
             }
         }
     }
@@ -90,7 +90,7 @@ class SavedSlots(
         noteLeft -= dt
         for ((i, b) in buttons.withIndex()) {
             val held = game.profile.saved[i]
-            b.label = if (wide) held?.label ?: "${i + 1}  EMPTY" else "${i + 1}"
+            b.label = if (wide) held?.let { SeedKey.pretty(it) } ?: "${i + 1}  EMPTY" else "${i + 1}"
             b.accent = if (held != null) Pal.GOLD else Pal.CYAN
             b.lit = held != null
         }

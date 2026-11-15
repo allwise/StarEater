@@ -68,8 +68,8 @@ On the title screen and in the pause menu.
 2. Every level after that rolls **1 to 5 rules**: one movement mode plus up to four modifiers. Early
    levels roll few rules, later levels roll more. The briefing deals them out on a **slot machine**:
    one reel for the movement mode, four for the twists, and a reel that lands on a blank is a twist
-   you were spared. The reels stop in no particular order, and one press stops them all if you are
-   in a hurry.
+   you were spared. Which reel deals what, and the order they stop in, is shuffled every time; one
+   press stops them all if you are in a hurry.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
 4. Eat the level's **quota** of stars to clear it. The quota grows every level.
 5. Every tenth level is a **boss**.
@@ -236,11 +236,9 @@ wall layouts, where the boss is. The same key deals the same run to anyone.
   random one, and shows your best scores on it.
 - After a run, **SAME SEED** replays it.
 
-There are five **saved-level slots**, which work like the preset buttons on a car radio. They sit
+There are five **saved-seed slots**, which work like the preset buttons on a car radio. They sit
 beside the button on every briefing, on the game-over screen and on the SEEDED RUN screen: press
-and hold one to store the level in hand (its seed key and level number), tap it on the SEEDED RUN
-screen to bring it back and play from that level. A level depends only on its seed and its number,
-so a saved level 17 is the same level 17 you met the first time.
+and hold one to keep the seed in hand, tap it on the SEEDED RUN screen to bring that key back.
 
 Scores are stored on the device only; comparing with a friend means comparing screens.
 
@@ -343,7 +341,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `arcade=1` | Make it an arcade run |
 | `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,dash,echo,nova` |
 | `align` | Screen position: `-1` left, `0` centre, `1` right |
-| `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved slots) |
+| `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |
 | `window` | Window size, e.g. `1600x720`, to try screens that are not 16:9 |
 | `dust` | Starting stardust |
 | `bot=1` | Let the autopilot play |

@@ -2,7 +2,6 @@ package io.github.allwise.stareater
 
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
-import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.meta.Skill
@@ -181,20 +180,18 @@ class MetaTest {
     }
 
     @Test
-    fun fiveSavedLevelsSurviveAReload() {
+    fun fiveSavedSeedsSurviveAReload() {
         val store = MemoryStore()
         val p = Profile(store)
         assertEquals(5, p.saved.size)
         assertTrue(p.saved.all { it == null })
-        p.store(0, SavedLevel("STAR22", 7))
-        p.store(3, SavedLevel("MQQN99", 14, arcade = true))
-        p.store(0, SavedLevel("ABCDEF", 3)) // storing again replaces
-        assertEquals("ABC-DEF LV3", p.saved[0]!!.label)
-        assertEquals("MQQ-N99 LV14 A", p.saved[3]!!.label)
+        p.store(0, "STAR22")
+        p.store(3, "MQQN99")
+        p.store(0, "ABCDEF") // storing again replaces
+        assertEquals(listOf("ABCDEF", null, null, "MQQN99", null), Profile(store).saved.toList())
 
-        val again = Profile(store)
-        assertEquals(listOf("ABCDEF:3", null, null, "MQQN99:14", null), again.saved.map { it?.let { s -> "${s.key}:${s.level}" } })
-        assertTrue(again.saved[3]!!.arcade)
-        assertFalse(again.saved[0]!!.arcade)
+        // A save written back when slots also remembered a level still loads, as just its key.
+        store.put("savedLevels", "STAR22:7:,,MQQN99:14:A,,")
+        assertEquals(listOf("STAR22", null, "MQQN99", null, null), Profile(store).saved.toList())
     }
 }

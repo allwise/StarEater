@@ -9,7 +9,6 @@ import io.github.allwise.stareater.gfx.Creatures
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
-import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.Enemy
 import io.github.allwise.stareater.sim.EnemyType
@@ -24,7 +23,8 @@ import kotlin.math.max
 
 /**
  * The briefing before each level, dealt by a slot machine: one reel for the movement mode and four
- * for the twists, stopping one after another. A reel that lands on a blank is a twist you were spared.
+ * for the twists. Which reel is which, and the order they stop in, is shuffled every time, so the
+ * hits turn up anywhere along the machine. A reel that lands on a blank is a twist you were spared.
  *
  * The level is already decided before the first reel moves (it depends only on the seed), so the
  * machine is pure theatre - and can be skipped with one press.
@@ -37,8 +37,12 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
     private val creatures = Creatures(game.gfx)
     private val models = HashMap<EnemyType, Enemy>()
 
-    /** @param turn this reel's place in the order they stop in, which is not left to right */
-    private class Reel(val index: Int, val turn: Int, var result: String, var pool: List<String>, var stopAt: Float) {
+    /**
+     * @param index where the reel sits on the machine, left to right
+     * @param rule what it deals: 0 for the movement mode, 1 to 4 for the twists
+     * @param turn its place in the order the reels stop in
+     */
+    private class Reel(val index: Int, val rule: Int, val turn: Int, var result: String, var pool: List<String>, var stopAt: Float) {
         var landed = false
         var landedAt = 0f
         var lastTick = 0
@@ -65,19 +69,21 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
         val moves = MoveKind.values().map { it.title }
         // Plenty of blanks on the twist reels, so a blank does not look like a miracle.
         val twists = Rules.all.map { it.title } + List(5) { BLANK }
-        // The reels stop in whatever order they feel like, the way real ones do.
+        // Both shuffled: which reel deals what (so the hits are not always the left-hand ones), and
+        // the order the reels stop in.
+        val place = (0 until LevelSpec.MAX_RULES).shuffled()
         val order = (0 until LevelSpec.MAX_RULES).shuffled()
         for (i in 0 until LevelSpec.MAX_RULES) {
             val result = if (i == 0) spec.move.title else spec.modifiers.getOrNull(i - 1)?.let { Rules.byId(it).title } ?: BLANK
             // On a boss level nothing is going to land on its own: the reels just run until the boss arrives.
             val stopAt = if (boss != null) FOREVER else FIRST_STOP + order[i] * STOP_GAP
-            reels += Reel(i, order[i], result, if (i == 0) moves else twists, stopAt)
+            reels += Reel(place[i], i, order[i], result, if (i == 0) moves else twists, stopAt)
         }
         val last = (reels.size - 1)
         settleAt = (if (boss != null) HIJACK_AT + HIJACK_STOP + last * HIJACK_GAP else FIRST_STOP + last * STOP_GAP) + 0.25f
 
-        // Five slots beside the button: hold one to put this level by for later.
-        slots = SavedSlots(this, game, go.x + go.w + 14f, 35f, wide = false, current = { if (SeedKey.isValid(run.key)) SavedLevel(run.key, run.level, run.arcade != null) else null })
+        // Five slots beside the button: hold one to keep this run's seed for another day.
+        slots = SavedSlots(this, game, go.x + go.w + 14f, 35f, wide = false, current = { run.key.takeIf { SeedKey.isValid(it) } })
     }
 
     private fun start() {
@@ -190,7 +196,7 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
             val won = r.landed && !r.blank
             val c = when {
                 hijacked -> Pal.RED
-                r.index == 0 -> Pal.CYAN
+                r.rule == 0 -> Pal.CYAN
                 else -> Pal.GOLD
             }
             g.rect(x, y0, REEL_W, MACHINE_H, Pal.BG)
@@ -252,12 +258,12 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
 
         // Each reel deals its card underneath as it lands: the mode across the top, twists in a grid.
         val half = (FULL - 16f) / 2f
-        val first = reels[0]
+        val first = reels.first { it.rule == 0 }
         if (first.landed && (boss == null || settled)) {
             card(LEFT, CARD_Y, FULL, CARD_H, spec.move.title, spec.move.blurb, true, clock - (if (boss != null) settleAt else first.landedAt))
         }
         for ((i, id) in spec.modifiers.withIndex()) {
-            val r = reels.getOrNull(i + 1) ?: break
+            val r = reels.firstOrNull { it.rule == i + 1 } ?: break
             if (!r.landed) continue
             val info = Rules.byId(id)
             val x = LEFT + (i % 2) * (half + 16f)
@@ -290,7 +296,7 @@ class IntroScreen(game: StarEaterGame, private val run: RunState, preset: LevelS
 
         slots.update(dt)
         drawButtons()
-        slots.caption(g, "HOLD TO SAVE THIS LEVEL", slots.right, 24f, Align.right)
+        slots.caption(g, "HOLD TO SAVE THIS SEED", slots.right, 24f, Align.right)
         val hint = when {
             !settled -> if (game.keyHints) "ENTER stops the reels" else "tap to stop the reels"
             game.keyHints -> "ENTER to go   -   ESC ends the run"

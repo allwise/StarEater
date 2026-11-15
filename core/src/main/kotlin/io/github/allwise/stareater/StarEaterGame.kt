@@ -14,7 +14,6 @@ import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
-import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Enemies
@@ -130,8 +129,8 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         if (d.dust >= 0) profile.grantDust(d.dust)
         for (boss in 10..d.checkpoint step 10) profile.beatBoss(boss)
         if (d.checkpoint > 0) {
-            profile.store(0, SavedLevel("STAR22", 7))
-            profile.store(2, SavedLevel("MQQN99", 14, arcade = true))
+            profile.store(0, "STAR22")
+            profile.store(2, "MQQN99")
         }
         if (d.allSkills) {
             profile.grantDust(Skill.totalCost)

@@ -7,7 +7,6 @@ import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.audio.Tune
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
-import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 
 /**
@@ -21,8 +20,6 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
     /** Keyboard focus is either on the key (type away) or on the buttons (arrows and ENTER). */
     private var onButtons = false
 
-    /** Set by recalling a saved level: play starts there, in that mode, until the key is changed. */
-    private var recalled: SavedLevel? = null
     private lateinit var slots: SavedSlots
     private lateinit var playButton: Button
 
@@ -37,22 +34,15 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         playButton.accent = Pal.GOLD
         button(Gfx.W / 2f - 105f, y, 210f, 44f, "TODAY'S SEED") { set(SeedKey.dailyNow()) }
         button(Gfx.W / 2f + 120f, y, 210f, 44f, "RANDOM") { set(SeedKey.random()) }
-        // Tap a slot to bring its level back; hold one to store whatever is showing.
-        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { SavedLevel(current(), startAt(), recalled?.arcade == true) }) {
-            set(it.key)
-            recalled = it
-        }
+        // Tap a slot to bring its seed back; hold one to store the key that is showing.
+        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { current() }) { set(it) }
         focus = 1
     }
 
     private fun set(k: String) {
         k.toCharArray().copyInto(key)
         slot = 0
-        recalled = null
     }
-
-    /** The level a run from this screen begins on. */
-    private fun startAt(): Int = recalled?.takeIf { it.key == current() }?.level ?: game.profile.startLevel
 
     private fun current(): String = String(key)
 
@@ -60,7 +50,7 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         val k = current()
         game.profile.lastSeed = k
         game.profile.save()
-        game.go(IntroScreen(game, SeedKey.newRun(k, recalled?.takeIf { it.key == k }?.arcade == true, startAt())))
+        game.go(IntroScreen(game, SeedKey.newRun(k, level = game.profile.startLevel)))
     }
 
     override fun back() = game.go(MenuScreen(game))
@@ -96,17 +86,15 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         if (current() == SeedKey.dailyNow()) g.text(g.tiny, "THIS IS TODAY'S SEED", cx, SLOT_Y + SLOT_H + 40f, Pal.GOLD, 1f, Align.center)
 
         showFocus = onButtons
-        val from = startAt()
-        val mode = if (recalled?.takeIf { it.key == current() }?.arcade == true) "ARCADE " else ""
-        playButton.label = if (from > 1 || mode.isNotEmpty()) "PLAY ${mode}FROM LV $from" else "PLAY THIS SEED"
-        playButton.small = playButton.label.length > 15
+        val from = game.profile.startLevel
+        playButton.label = if (from > 1) "PLAY FROM LV $from" else "PLAY THIS SEED"
         slots.update(dt)
         drawButtons()
         if (game.keyHints) {
             val hint = if (onButtons) "ARROWS and ENTER   -   TAB: back to the key" else "TYPE a key, ENTER to play   -   TAB: buttons"
             g.text(g.tiny, hint, cx, 216f, Pal.DIM, 1f, Align.center)
         }
-        slots.caption(g, "SAVED LEVELS   -   tap one to bring it back, press and hold one to store what is showing", cx, 200f, Align.center)
+        slots.caption(g, "SAVED SEEDS   -   tap one to bring it back, press and hold one to store the key above", cx, 200f, Align.center)
 
         // How you have done on this key so far.
         val rows = game.profile.seedScores(current(), 3)

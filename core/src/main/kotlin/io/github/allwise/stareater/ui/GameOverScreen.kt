@@ -11,7 +11,6 @@ import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.Sparkles
 import io.github.allwise.stareater.gfx.WorldRenderer
-import io.github.allwise.stareater.meta.SavedLevel
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.RunState
 import kotlin.math.exp
@@ -71,8 +70,8 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
         button(x0 + (w + 12f) * 2, y, w, 44f, "SKILL TREE") { game.go(SkillScreen(game)) }
         button(x0 + (w + 12f) * 3, y, w, 44f, "MENU") { game.go(MenuScreen(game)) }
         button(Gfx.W / 2f + 150f, SLOT_Y + 4f, 110f, 44f, "OK") { confirm() }.accent = Pal.GOLD
-        // Hold a slot to keep the level this run ended on, to have another go at it later.
-        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { if (SeedKey.isValid(run.key)) SavedLevel(run.key, run.level, arcade) else null })
+        // Hold a slot to keep this run's seed, to come back to it later.
+        slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { run.key.takeIf { SeedKey.isValid(it) } })
         refresh()
     }
 
@@ -199,7 +198,7 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
         }
         slots.update(dt)
         drawButtons()
-        val keep = if (SeedKey.isValid(run.key)) "PRESS AND HOLD A SLOT TO KEEP LEVEL ${run.level} OF ${SeedKey.pretty(run.key)} FOR ANOTHER GO" else "SAVED LEVELS"
+        val keep = if (SeedKey.isValid(run.key)) "PRESS AND HOLD A SLOT TO KEEP SEED ${SeedKey.pretty(run.key)} FOR LATER" else "SAVED SEEDS"
         slots.caption(g, keep, cx, 204f, Align.center)
     }
 

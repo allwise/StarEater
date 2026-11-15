@@ -51,8 +51,8 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         )
         section(
             "SEEDS",
-            "Every run has a six-letter seed key; the same key deals the same levels to anyone. Hold a slot to save a " +
-                "level for later. Beat a boss and new runs can start after it.",
+            "Every run has a six-letter seed key; the same key deals the same levels to anyone. Hold a slot to keep a " +
+                "seed for later. Beat a boss and new runs can start after it.",
         )
         section(
             "THE LONG GAME",
