@@ -39,8 +39,8 @@ class OptionsScreen(game: StarEaterGame, private val onBack: () -> Unit) : Scree
 
         for ((i, name) in listOf("LEFT", "CENTRE", "RIGHT").withIndex()) {
             align += button(CONTROLS + i * 132f, ROW_SCREEN - 20f, 124f, 40f, name) {
+                // Nothing moves yet: the picture only slides over while a level is being played.
                 p.screenAlign = i - 1
-                game.gfx.align = p.screenAlign
             }
         }
 
@@ -85,9 +85,10 @@ class OptionsScreen(game: StarEaterGame, private val onBack: () -> Unit) : Scree
         label(ROW_SOUND, "SOUND", "")
         bar(ROW_SOUND, if (p.sfxOn) p.sfxVol else 0, Pal.GOLD)
 
-        label(ROW_SCREEN, "SCREEN", "on a wide screen: leave a side free for your thumb")
+        label(ROW_SCREEN, "SCREEN", "in a level, on a wide screen: leave a side free for your thumb")
         for ((i, b) in align.withIndex()) b.accent = if (i - 1 == p.screenAlign) Pal.GOLD else Pal.CYAN
         marker(align[p.screenAlign + 1])
+        preview(p.screenAlign)
 
         tilt?.let {
             label(rowTilt, "TILT STEERING", "lean the phone to steer - level is however you hold it at the start")
@@ -116,6 +117,20 @@ class OptionsScreen(game: StarEaterGame, private val onBack: () -> Unit) : Scree
         // A notch at the level the game was mixed for.
         g.rect(x0 + Profile.VOLUME_DEFAULT * 27f - 4f, y - 20f, 2f, 5f, Pal.DIM)
         g.text(g.tiny, if (value == 0) "OFF" else value.toString(), CONTROLS + 404f, y + 5f, Pal.DIM, 1f, Align.left)
+    }
+
+    /** The window in miniature, with the picture where a level will put it and the thumb's bar beside it. */
+    private fun preview(align: Int) {
+        val spare = g.spareLeft + g.spareRight
+        if (spare < 8f) return
+        val k = 104f / (Gfx.W + spare)
+        val x = CONTROLS + 3 * 132f + 12f
+        val h = Gfx.H * k
+        val y = ROW_SCREEN - h / 2f
+        val picture = Gfx.W * k
+        g.rect(x, y, 104f, h, Pal.PANEL_HI, 0.8f)
+        g.rect(x + (104f - picture) * (align + 1) / 2f, y, picture, h, Pal.GOLD, 0.85f)
+        g.frame(x, y, 104f, h, 1.5f, Pal.LINE)
     }
 
     /** Underlines the chosen one of a row of either/or buttons. */

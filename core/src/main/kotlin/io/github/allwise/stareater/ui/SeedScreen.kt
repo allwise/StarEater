@@ -53,7 +53,7 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
         game.go(IntroScreen(game, SeedKey.newRun(k, level = game.profile.startLevel)))
     }
 
-    override fun back() = game.go(MenuScreen(game))
+    override fun back() = game.go(MenuScreen(game, more = true))
 
     private fun spin(i: Int, by: Int) {
         slot = i

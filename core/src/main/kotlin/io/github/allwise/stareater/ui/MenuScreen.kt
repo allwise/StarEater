@@ -20,8 +20,14 @@ import io.github.allwise.stareater.sim.RunState
 import io.github.allwise.stareater.sim.World
 import kotlin.random.Random
 
-/** Title screen. The bot plays random levels behind the menu as an attract mode. */
-class MenuScreen(game: StarEaterGame) : Screen(game) {
+/**
+ * Title screen. The bot plays random levels behind the menu as an attract mode.
+ *
+ * Two pages of one column each. The front one is only what there is to play - a mode shows up there
+ * when its boss has been beaten, not before - plus the skill tree. Everything else is behind MORE;
+ * pass [more] to open on that page, which is where the screens reached from it come back to.
+ */
+class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Screen(game) {
     private val renderer = WorldRenderer(game.gfx)
     private val rng = Random(System.nanoTime())
     private val input = InputState()
@@ -29,6 +35,13 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
     private var demo = newDemo()
 
     private lateinit var from: Button
+    private var picker = false
+    private val front = ArrayList<Button>()
+    private val extras = ArrayList<Button>()
+
+    /** What the next boss opens, said in a line under the front page rather than with a dead button. */
+    private var hint = ""
+    private var hintY = 0f
 
     private fun newDemo(): World {
         bot = Bot()
@@ -43,45 +56,56 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
 
     override fun show() {
         game.audio.tune(Tune.MENU)
-        // Two columns: the ways to play on the left, everything else on the right.
-        val w = 275f
-        val left = Gfx.W / 2f - w - 10f
-        val right = Gfx.W / 2f + 10f
         val p = game.profile
-        fun row(i: Int): Float = 322f - i * 43f
+        val w = 300f
+        val x = Gfx.W / 2f - w / 2f
+        var rows = 0
+        fun next(): Float = TOP - rows++ * PITCH
 
         // The campaign shares its row with a start-level picker, once a boss has been beaten.
-        val wide = p.checkpoint == 0 || p.startLevels().size < 2
-        button(left, row(0), if (wide) w else w - 98f, 37f, "CAMPAIGN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = p.startLevel))) }
-        from = button(left + w - 90f, row(0), 90f, 37f, "") {
+        picker = p.checkpoint > 0 && p.startLevels().size >= 2
+        val y0 = next()
+        front += button(x, y0, if (picker) w - 98f else w, 37f, "CAMPAIGN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = p.startLevel))) }
+        from = button(x + w - 90f, y0, 90f, 37f, "") {
             val levels = p.startLevels()
             p.startLevel = levels[(levels.indexOf(p.startLevel) + 1) % levels.size]
             p.save()
         }
         from.small = true
-        from.visible = !wide
 
-        // The other three modes open one boss at a time.
-        for ((i, mode) in listOf(GameMode.MATRIX, GameMode.FLOW, GameMode.ENDLESS).withIndex()) {
-            val open = p.unlocked(mode)
-            val b = button(left, row(i + 1), w, 37f, if (open) mode.title else "LOCKED - BEAT BOSS ${mode.ordinal}") {
+        // The other three modes open one boss at a time, and are not on the menu until they do.
+        val modes = listOf(GameMode.MATRIX, GameMode.FLOW, GameMode.ENDLESS)
+        for (mode in modes.filter { p.unlocked(it) }) {
+            front += button(x, next(), w, 37f, mode.title) {
                 game.go(PocketShop(game, SeedKey.newRun(SeedKey.random(), mode), pitStop = false))
-            }
-            b.enabled = open
-            b.small = !open
-            b.accent = Pal.GOLD
+            }.also { it.accent = Pal.GOLD }
         }
-        button(left, row(4), w, 37f, "SEEDED RUN") { game.go(SeedScreen(game)) }
+        front += button(x, next(), w, 37f, "SKILL TREE") { game.go(SkillScreen(game)) }
+        front += button(x, next(), w, 37f, "MORE") { turn(true) }
+        modes.firstOrNull { !p.unlocked(it) }?.let { hint = "BEAT BOSS ${it.ordinal} TO OPEN ${it.title}" }
+        hintY = TOP - rows * PITCH + 26f
 
-        button(right, row(0), w, 37f, "SKILL TREE") { game.go(SkillScreen(game)) }
-        button(right, row(1), w, 37f, "HIGH SCORES") { game.go(ScoresScreen(game)) }
-        button(right, row(2), w, 37f, "HOW TO PLAY") { game.go(HelpScreen(game)) }
-        button(right, row(3), w, 37f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game)) }) }
-        if (Gdx.app.type == Application.ApplicationType.Desktop) button(right, row(4), w, 37f, "QUIT") { Gdx.app.exit() }
+        rows = 0
+        extras += button(x, next(), w, 37f, "SEEDED RUN") { game.go(SeedScreen(game)) }
+        extras += button(x, next(), w, 37f, "HIGH SCORES") { game.go(ScoresScreen(game)) }
+        extras += button(x, next(), w, 37f, "HOW TO PLAY") { game.go(HelpScreen(game)) }
+        extras += button(x, next(), w, 37f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game, more = true)) }) }
+        if (Gdx.app.type == Application.ApplicationType.Desktop) extras += button(x, next(), w, 37f, "QUIT") { Gdx.app.exit() }
+        extras += button(x, next(), w, 37f, "BACK") { turn(false) }
+        turn(more)
+    }
+
+    /** Shows one page's buttons and hides the other's, with the focus on the top one. */
+    private fun turn(toMore: Boolean) {
+        more = toMore
+        for (b in front) b.visible = !more
+        for (b in extras) b.visible = more
+        from.visible = !more && picker
+        focus = buttons.indexOfFirst { it.usable }
     }
 
     override fun back() {
-        if (Gdx.app.type == Application.ApplicationType.Desktop) Gdx.app.exit()
+        if (more) turn(false) else if (Gdx.app.type == Application.ApplicationType.Desktop) Gdx.app.exit()
     }
 
     override fun render(dt: Float) {
@@ -93,6 +117,14 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         renderer.draw(demo, dt)
         if (demo.phase != World.Phase.PLAYING && demo.phaseTime > 1.6f) demo = newDemo()
         g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, 0.72f)
+        // On a window wider than the picture the demo would end in a hard edge: melt it into the bars.
+        if (g.spareLeft > 1f || g.spareRight > 1f) {
+            for (i in 0 until FADE) {
+                val a = 1f - (i + 0.5f) / FADE
+                g.rect(i * 6f, 0f, 6f, Gfx.H, Pal.BG, a * a)
+                g.rect(Gfx.W - (i + 1) * 6f, 0f, 6f, Gfx.H, Pal.BG, a * a)
+            }
+        }
 
         val cx = Gfx.W / 2f
         val bob = MathUtils.sin(age * 1.6f) * 3f
@@ -104,6 +136,7 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
 
         from.label = "FROM ${game.profile.startLevel}"
         drawButtons()
+        if (!more && hint.isNotEmpty()) g.text(g.tiny, hint, cx, hintY, Pal.DIM, 0.9f, Align.center)
 
         val p = game.profile
         g.star(24f, 26f, 9f, 4f, 5, 90f, Pal.STAR)
@@ -111,5 +144,14 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         val skills = "${p.owned.size}/${Skill.values().size} SKILLS"
         g.text(g.small, if (p.mastered) "MASTERED - $skills" else skills, 42f, 58f, if (p.mastered) Pal.GOLD else Pal.DIM)
         if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 40f, Pal.DIM, 1f, Align.right)
+    }
+
+    private companion object {
+        /** The top button's y, and the step from one row to the next. */
+        const val TOP = 322f
+        const val PITCH = 43f
+
+        /** Strips in the fade at each side of the demo. */
+        const val FADE = 16
     }
 }

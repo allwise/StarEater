@@ -11,6 +11,7 @@ import com.badlogic.gdx.math.Vector2
 import com.badlogic.gdx.utils.ScreenUtils
 import io.github.allwise.stareater.audio.Audio
 import io.github.allwise.stareater.gfx.Gfx
+import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
@@ -136,7 +137,6 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         // Dev runs use a throwaway save so they never touch real progress.
         profile = Profile(if (dev != null) MemoryStore() else PrefsStore())
         if (dev != null) profile.screenAlign = dev.align
-        gfx.align = profile.screenAlign
         audio = Audio(profile)
         audio.load()
         Gdx.input.inputProcessor = this
@@ -202,6 +202,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
                 profile.lastSeed = "STAR22"
                 go(SeedScreen(this))
             }
+            "more" -> go(MenuScreen(this, more = true))
             else -> go(MenuScreen(this))
         }
     }
@@ -210,6 +211,9 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
     fun go(next: Screen, show: Boolean = true) {
         screen = next
         platform.lockOrientation(next is PlayScreen)
+        // The picture slides to one side only for the level itself, to leave a bar for the thumb.
+        // Every other screen sits in the middle of the window, and its backdrop runs out to the edges.
+        gfx.align = if (next is PlayScreen) profile.screenAlign else 0
         if (show) next.show() else next.resume()
     }
 
@@ -221,7 +225,8 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         // Dev runs step at a fixed rate so bot runs and screenshots are repeatable.
         val dt = if (dev != null) 1f / 60f else minOf(Gdx.graphics.deltaTime, 1f / 30f)
         audio.update(dt)
-        ScreenUtils.clear(0f, 0f, 0f, 1f)
+        // Beside the field the bars are black, so its edges - which wrap - stay plain to see.
+        if (screen is PlayScreen) ScreenUtils.clear(0f, 0f, 0f, 1f) else ScreenUtils.clear(Pal.BG)
         gfx.begin()
         screen?.render(dt)
         gfx.overlay()

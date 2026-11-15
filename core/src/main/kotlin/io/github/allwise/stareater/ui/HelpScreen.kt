@@ -18,7 +18,7 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         button(16f, Gfx.H - 50f, 110f, 36f, "BACK") { back() }.small = true
     }
 
-    override fun back() = game.go(MenuScreen(game))
+    override fun back() = game.go(MenuScreen(game, more = true))
 
     override fun render(dt: Float) {
         age += dt

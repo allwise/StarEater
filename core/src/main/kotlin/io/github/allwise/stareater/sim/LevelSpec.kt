@@ -21,6 +21,9 @@ class LevelSpec(
     /** Set on boss levels: the big one. The quota is then its health. */
     var boss: EnemyType? = null
 
+    /** Set on the one level of an endless run, whose quota is a wave and which never meets a boss. */
+    var endless = false
+
     var quota = 8
     var starsOnField = 2
     var enemyStart = 1
@@ -121,7 +124,7 @@ object LevelGen {
         val roster = ArrayList<EnemyType>()
         while (roster.size < 3) roster += available.removeAt(rng.nextInt(available.size))
         if (roster.none { it in Enemies.hunters }) roster[0] = pick(rng, Enemies.hunters) { 1f }
-        return build(1, move, mods, roster.sortedBy { Enemies.all.indexOf(it) })
+        return build(1, move, mods, roster.sortedBy { Enemies.all.indexOf(it) }).also { it.endless = true }
     }
 
     /**
@@ -170,6 +173,10 @@ object LevelGen {
      * everything is new; from there on the slope is gentle, so that the back two thirds of the
      * campaign are a matter of practice rather than a wall.
      *
+     * The quota is the exception: it drops back by [BOSS_RELIEF] after every boss. More twists, more
+     * and quicker enemies already make a late level take longer, so the star count gives some back
+     * and a level stays about as long as it was.
+     *
      * Safe to call again on a spec that is already in play, which is how the endless mode gets harder.
      */
     fun scale(s: LevelSpec, n: Int) {
@@ -178,8 +185,8 @@ object LevelGen {
         // "Early" is the part of the curve up to the first boss; "late" is everything past it.
         val early = min(k, STEEP)
         val late = max(0, k - STEEP)
-        s.quota = 8 + 2 * early + late
-        if (s.quota > 46) s.quota = 46
+        val relief = if (s.endless) 0 else BOSS_RELIEF * (k / LevelSpec.BOSS_EVERY)
+        s.quota = min(46, 8 + 2 * early + late - relief)
         s.starsOnField = when (s.move) {
             MoveKind.SCROLL -> 5 + min(3, n / 5)
             MoveKind.ORBIT -> 4 + min(3, n / 4)
@@ -206,6 +213,9 @@ object LevelGen {
 
     /** How many levels the steep part of the difficulty curve lasts. */
     private const val STEEP = 8
+
+    /** How many stars come off the quota for each boss already behind you. */
+    const val BOSS_RELIEF = 6
 
     private fun <T> pick(rng: Random, items: List<T>, weight: (T) -> Float): T {
         var total = 0f

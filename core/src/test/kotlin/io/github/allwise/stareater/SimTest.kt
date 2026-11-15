@@ -699,6 +699,34 @@ class SimTest {
         assertTrue(run.score > 0 && run.dust > 0f)
     }
 
+    /** Levels past 10 ran long: every boss now takes six stars back off the quota, twists and all else as before. */
+    @Test
+    fun theQuotaDropsBackAfterEveryBoss() {
+        fun quota(n: Int) = LevelGen.build(n, MoveKind.GRID, emptyList(), listOf(Eater)).quota
+        assertEquals(24, quota(9))
+        assertEquals(20, quota(11))
+        assertEquals(28, quota(19))
+        assertEquals(24, quota(21))
+        assertEquals(32, quota(29))
+        // Inside a stretch between bosses it still only ever goes up.
+        for (n in 2..29) if (n % 10 > 1) assertTrue(quota(n) > quota(n - 1), "level $n")
+        // No level of the campaign asks for more than the last one before the first boss did, plus a bit.
+        assertTrue((1..29).maxOf { quota(it) } <= 32)
+        // The bosses' own health is not touched.
+        assertEquals(listOf(20, 22, 24), listOf(10, 20, 30).map { LevelGen.bossLevel(it, Random(1)).quota })
+        // Endless has no bosses to earn a break from: its waves only grow.
+        val wave = LevelGen.forSeed(5L, 1, GameMode.ENDLESS)
+        var last = wave.quota
+        for (n in 2..30) {
+            LevelGen.scale(wave, n)
+            assertTrue(wave.quota >= last, "wave $n")
+            last = wave.quota
+        }
+        // And asking twice changes nothing.
+        LevelGen.scale(wave, 30)
+        assertEquals(last, wave.quota)
+    }
+
     /** The complaint was a wall at levels 12 to 16. Past the first boss the numbers should only creep. */
     @Test
     fun theBackOfTheCampaignIsAClimbNotAWall() {
@@ -706,7 +734,7 @@ class SimTest {
         assertTrue(at(16).enemyMax <= 9, "level 16 used to field 13 enemies; now ${at(16).enemyMax}")
         assertTrue(at(16).spawnInterval >= 6f)
         assertTrue(at(16).enemySpeed < 5f)
-        assertTrue(at(16).quota <= 32)
+        assertTrue(at(16).quota <= 26)
         // Still a climb all the way to the end, though.
         for (n in 2..30) {
             assertTrue(at(n).enemySpeed >= at(n - 1).enemySpeed)

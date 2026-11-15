@@ -63,6 +63,9 @@ desktop jar and the debug APK on every push: after pushing, check that run.
   no effect ends on a click. A tune that dies away before its last bar ends is a seam you can hear.
 - **`LevelGen.scale` is called again on a live level** (Endless does it every wave), so rule `tune`
   functions must give the same result however many times they run.
+- **The picture is only slid sideways on `PlayScreen`** (`StarEaterGame.go` sets `gfx.align`). Every
+  other screen is centred and the window is cleared to `Pal.BG`, so a screen whose backdrop is not
+  plain `Pal.BG` right to the canvas edge shows a seam on a wide phone. Check with `window=1600x720`.
 - Buttons hide rather than disappear: screens index into `buttons` by position in places
   (`GameOverScreen.refresh`), so add new ones at the end.
 
@@ -81,6 +84,10 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
   only), boss 2 Arcade Flow (never the grid), boss 3 Endless.
 - Arcade and Endless have no skill tree: field pick-ups plus three pockets of one-use items. The
   pit stop (every 5th level) spends only what the run has earned, and each purchase raises prices 25%.
+- The title screen's front page is only what can be played now, plus the skill tree: locked modes
+  are not listed, one line names the next unlock, and everything else lives behind MORE.
+- The quota drops by 6 after each boss (not in Endless, and not the bosses' own); rules, enemies and
+  speed keep climbing regardless. Level length should stay roughly flat across the campaign.
 - No more boards than modes. Marks instead: gold star = mastered campaign run, diamond = pure run
   (nothing used from the pockets).
 - Overdrive replaced the dash everywhere. Suns only pull; black holes kill outright (a Second Wind
@@ -92,11 +99,14 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 
 *As of 2026-11-15.*
 
-**Built and pushed, waiting on a playtest:** the four modes and their unlocks; pockets, pit
-stops and the six items; Overdrive; the action buttons down one edge; the gentler difficulty curve
-past level 10 and the dark-level changes (fewer, slower enemies; eyes in the dark); the Matrix, Flow
-and Endless tunes; the Android orientation lock; the new SVG icon. Expect tuning feedback on levels
-12 to 20, item prices, and the three new tunes (never heard by ear).
+**Playtested once (2026-11-15): "a lot of good feel".** Three small things came back and are built
+and pushed, waiting on the next playtest: menus centred on the whole screen instead of following
+the left/right setting; the two-page title screen with locked modes hidden; the quota dropping by
+6 after each boss because levels past 10 to 15 ran long (level 11 is now 20 stars, 19 is 28, 21 is
+24, 29 is 32).
+
+**Still not commented on, so still open for tuning:** item prices, enemy numbers and speed on
+levels 12 to 20, the dark levels, and the Matrix, Flow and Endless tunes (never heard by ear).
 
 **Next, in the agreed order** (do not start until the playtest feedback is in):
 

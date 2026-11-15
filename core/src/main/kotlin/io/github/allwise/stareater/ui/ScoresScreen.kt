@@ -33,7 +33,7 @@ class ScoresScreen(game: StarEaterGame) : Screen(game) {
         focus = 1
     }
 
-    override fun back() = game.go(MenuScreen(game))
+    override fun back() = game.go(MenuScreen(game, more = true))
 
     override fun keyDown(key: Int): Boolean {
         if (key == Keys.TAB) { tab = (tab + 1) % tabs.size; return true }

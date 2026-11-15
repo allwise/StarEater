@@ -58,18 +58,24 @@ Run the tests:
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
 
+The title screen has two pages. The front one is what there is to play - the campaign, each other
+mode once its boss is beaten (until then a line says which boss opens the next one), and the skill
+tree. MORE holds the rest: seeded runs, high scores, how to play and the options.
+
 The three action buttons run down one edge of the field - top, middle, bottom - on the right, or on
 the left if the picture has been slid left to put the joystick pad on the right.
 
 ### Options
 
-On the title screen and in the pause menu.
+Under MORE on the title screen, and in the pause menu.
 
 - **Music** and **sound** volume, ten steps each (0 is off).
 - **Screen: left / centre / right.** The picture is always 16:9. On a screen wider than that, this
-  slides it to one side so the spare width ends up under one thumb. The bar left over is marked out
-  as a joystick pad, and the floating stick works and is drawn out there, so steering never has to
-  cover the game.
+  slides it to one side while a level is being played, so the spare width ends up under one thumb.
+  The bar left over is marked out as a joystick pad, and the floating stick works and is drawn out
+  there, so steering never has to cover the game. Menus and every other screen stay in the middle,
+  with their backdrop running out to the edges; a small diagram beside the buttons shows where the
+  picture will go.
 - **Tilt steering** (phones and tablets): lean the device the way you want to go. However it is held
   when a level starts counts as level, and it re-centres after every pause. Three sensitivities. In
   classic levels a firm lean is a held direction.
@@ -86,7 +92,9 @@ On the title screen and in the pause menu.
    you were spared. Which reel deals what, and the order they stop in, is shuffled every time; one
    press stops them all if you are in a hurry.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
-4. Eat the level's **quota** of stars to clear it. The quota grows every level.
+4. Eat the level's **quota** of stars to clear it. The quota grows every level, then drops back by
+   six after each boss: the twists and the enemies keep piling on as before, and the star count
+   gives a little back so that a late level is no longer than an early one.
 5. Every tenth level is a **boss**. The third one, on level 30, is the end of the campaign.
 6. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
 
@@ -379,7 +387,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 
 | Key | Meaning |
 |---|---|
-| `screen` | `menu`, `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options`, `pack`, `pitstop` |
+| `screen` | `menu`, `more` (the title screen's second page), `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options`, `pack`, `pitstop` |
 | `level` | Level number to scale difficulty for |
 | `move` | `GRID`, `GLIDE`, `SCROLL` or `ORBIT` |
 | `mods` | Comma-separated rule ids: `fog,walls,shy,decay,swarm,countdown,meteors,restless,tail,gravity,inversion,deep,lightsout` |
@@ -390,7 +398,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,overdrive,echo` |
 | `items` | Up to three pocket items: `overdrive,stun,wipe,flare,shield,pull` |
 | `won=1` | With `screen=over`: show the campaign-complete ending |
-| `align` | Screen position: `-1` left, `0` centre, `1` right |
+| `align` | Where the picture sits during a level: `-1` left, `0` centre, `1` right |
 | `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |
 | `window` | Window size, e.g. `1600x720`, to try screens that are not 16:9 |
 | `dust` | Starting stardust |
