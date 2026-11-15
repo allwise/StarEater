@@ -1,0 +1,60 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Star Eater's icon: the whole game in three shapes. The E is after the o, the o is after the star.
+
+  Drawn on Android's 108-unit adaptive-icon grid: launchers show the middle 72 units and may mask
+  that down to a circle 66 across, so everything that matters sits inside that circle. The
+  "background" group is the back layer and the "art" group the front one; tools/make_icons.cjs
+  renders them separately for Android and together for everything else.
+
+  Flat shapes only, no filters: it has to survive being 48 pixels wide.
+-->
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 108 108" width="432" height="432">
+  <defs>
+    <radialGradient id="sky" cx="54" cy="52" r="62" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#1b2a66"/>
+      <stop offset="0.55" stop-color="#0c1230"/>
+      <stop offset="1" stop-color="#060914"/>
+    </radialGradient>
+  </defs>
+
+  <g id="background">
+    <rect width="108" height="108" fill="url(#sky)"/>
+    <!-- A few far-off stars, out towards the corners where nothing else is. -->
+    <g fill="#7f8cb8">
+      <rect x="20" y="24" width="1.6" height="1.6"/>
+      <rect x="38" y="15" width="1.2" height="1.2"/>
+      <rect x="88" y="62" width="1.6" height="1.6"/>
+      <rect x="70" y="86" width="1.2" height="1.2"/>
+      <rect x="14" y="52" width="1.2" height="1.2"/>
+      <rect x="93" y="22" width="1.2" height="1.2"/>
+      <rect x="46" y="94" width="1.6" height="1.6"/>
+    </g>
+    <g fill="#4fe3ff">
+      <rect x="84" y="88" width="1.4" height="1.4"/>
+      <rect x="12" y="84" width="1.4" height="1.4"/>
+      <rect x="56" y="12" width="1.4" height="1.4"/>
+    </g>
+  </g>
+
+  <g id="art" transform="translate(2 -1.5)">
+    <!-- The star: what the o is after. -->
+    <circle cx="73" cy="40" r="19" fill="#ffc533" opacity="0.13"/>
+    <circle cx="73" cy="40" r="14" fill="#ffc533" opacity="0.16"/>
+    <path fill="#ffc533" transform="rotate(-8 73 40)"
+          d="M73 28.5 L75.94 35.96 L83.94 36.45 L77.75 41.54 L79.76 49.3 L73 45 L66.24 49.3 L68.25 41.54 L62.06 36.45 L70.06 35.96 Z"/>
+    <circle cx="73" cy="40" r="2.6" fill="#fff6c9"/>
+
+    <!-- The o: you. A ring, mid-lunge. -->
+    <circle cx="51.5" cy="56.5" r="19" fill="#4fe3ff" opacity="0.12"/>
+    <circle cx="51.5" cy="56.5" r="15" fill="#4fe3ff" opacity="0.18"/>
+    <circle cx="51.5" cy="56.5" r="9.6" fill="#060914" stroke="#eafcff" stroke-width="5.2"/>
+
+    <!-- The E: what is after you. Its arms are jaws. -->
+    <circle cx="31.5" cy="68" r="13" fill="#ff4d5e" opacity="0.14"/>
+    <g fill="none" stroke="#ff4d5e" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-24 31.5 68)">
+      <path d="M36.5 61 L27 61 L27 75 L36.5 75"/>
+      <path d="M27 68 L34 68"/>
+    </g>
+  </g>
+</svg>

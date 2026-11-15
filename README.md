@@ -308,7 +308,8 @@ core/      All game code. No platform dependencies beyond libGDX.
 lwjgl3/    Desktop launcher.
 android/   Android launcher.
 assets/    The font. Everything else is drawn in code.
-tools/     The script that cuts the icons.
+art/       The icon, as an SVG.
+tools/     The script that renders the icons from it.
 ```
 
 The simulation only ever sees an `InputState` and only ever emits entities plus a list of `Fx`
@@ -358,12 +359,13 @@ rasterises its font at the device's real resolution. It keeps the screen awake w
 as a level is being played (so leaning the phone to steer cannot flip the picture), and asks for
 one permission, `VIBRATE`.
 
-The launcher icons and the desktop window icons are cut from one image,
-`core/src/main/resources/images/StarEaterIcon1.png`. After changing it, regenerate them (needs
-Pillow):
+The icon is one drawing, `art/icon.svg`: the E after the o, the o after the star, in flat shapes that
+still read at 48 pixels. Android's launcher icons (adaptive, plain and round) and the desktop window
+icons are all rendered from it. After changing the drawing, render them again (needs Node and
+Playwright):
 
 ```bash
-python3 tools/make_icons.py
+node tools/make_icons.cjs
 ```
 
 ## Developer switches
