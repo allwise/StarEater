@@ -18,7 +18,9 @@ import java.util.EnumMap
  */
 class LoopPlayer {
     private var data: ShortArray? = null
-    private var pos = 0
+
+    /** Where in the tune we are. A whole number at normal speed; in between when it is running fast. */
+    private var pos = 0.0
 
     /** The volume the last block ended on. */
     var gain = 0f
@@ -29,7 +31,7 @@ class LoopPlayer {
     /** Starts a tune from its first sample, silent until [fill] is told otherwise. */
     fun start(pcm: ShortArray) {
         data = pcm
-        pos = 0
+        pos = 0.0
         gain = 0f
     }
 
@@ -41,18 +43,27 @@ class LoopPlayer {
     /**
      * Writes the next block into [out], wrapping round the end of the tune, with the volume sliding
      * from where it was to [target] across the block so nothing ever clicks.
+     *
+     * @param rate playback speed. Above 1 the tune runs faster and a little higher, like a tape
+     * being hurried: the old arcade trick for turning the screw.
      */
-    fun fill(out: ShortArray, target: Float) {
+    fun fill(out: ShortArray, target: Float, rate: Float = 1f) {
         val d = data
         if (d == null || d.isEmpty()) {
             out.fill(0)
             return
         }
         val step = (target - gain) / out.size
+        val n = d.size
         for (i in out.indices) {
             gain += step
-            out[i] = (d[pos] * gain).toInt().toShort()
-            if (++pos == d.size) pos = 0
+            val at = pos.toInt()
+            val part = (pos - at).toFloat()
+            // Between two samples when running fast: take the point on the line joining them.
+            val v = if (part == 0f) d[at].toFloat() else d[at] + (d[if (at + 1 == n) 0 else at + 1] - d[at]) * part
+            out[i] = (v * gain).toInt().toShort()
+            pos += rate
+            if (pos >= n) pos -= n
         }
         gain = target
     }
@@ -79,6 +90,7 @@ class Audio(private val profile: Profile) : Disposable {
     // What the streaming thread should be playing right now, and how loud.
     @Volatile private var streamTune: Tune? = null
     @Volatile private var streamGain = 0f
+    @Volatile private var streamRate = 1f
     @Volatile private var running = false
     @Volatile private var paused = false
     private var streamer: Thread? = null
@@ -137,7 +149,7 @@ class Audio(private val profile: Profile) : Disposable {
                     written = 0L
                 }
                 // A different tune (or none) is wanted: glide this one out first, then let go of it.
-                player.fill(block, if (want == current) streamGain else 0f)
+                player.fill(block, if (want == current) streamGain else 0f, streamRate)
                 device.writeSamples(block, 0, BLOCK)
                 written += BLOCK
                 if (want != current && player.gain <= 0f) player.stop()
@@ -184,6 +196,7 @@ class Audio(private val profile: Profile) : Disposable {
      * later (room for a jingle); with [fadeIn] it creeps in over that long instead of just starting.
      */
     fun tune(t: Tune?, after: Float = 0f, fadeIn: Float = 0f) {
+        if (t != wanted) streamRate = 1f
         wanted = t
         delay = after
         this.fadeIn = fadeIn
@@ -193,6 +206,11 @@ class Audio(private val profile: Profile) : Disposable {
     private fun musicVolume(): Float {
         val gain = streamTune?.gain ?: 1f
         return (MUSIC_VOLUME * gain * fade * profile.musicVol / Profile.VOLUME_DEFAULT).coerceIn(0f, 1f)
+    }
+
+    /** Hurries the tune that is playing: 1 is normal, 1.3 is as frantic as it gets. Any new tune starts back at 1. */
+    fun tempo(rate: Float) {
+        streamRate = rate.coerceIn(0.8f, 1.4f)
     }
 
     /** Call after changing a volume in the profile, so the tune that is playing follows it. */

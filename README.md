@@ -11,6 +11,15 @@ difficulty keeps climbing, every tenth level is a boss, and a permanent skill tr
 little further each run. Every run has a six-letter seed key, so two people can play the very same
 run and compare.
 
+There are four ways to play, and they open one boss at a time:
+
+| Mode | What it is | Opens |
+|---|---|---|
+| **Campaign** | Thirty levels, three bosses, and the skill tree to grow into. Beat the third boss and it is complete. | from the start |
+| **Arcade Matrix** | No skill tree. Every level is the classic grid. | boss 1 |
+| **Arcade Flow** | No skill tree. Every level glides: glide, scroller or orbit, never the grid. | boss 2 |
+| **Endless** | No skill tree. One level, dealt once, that never ends: each quota is a wave, and each wave is harder. | boss 3 |
+
 Built with **Kotlin + [libGDX](https://libgdx.com/)**. Runs on desktop today; the Android module
 shares all of the game code.
 
@@ -40,13 +49,17 @@ Run the tests:
 |---|---|---|
 | Move | Arrow keys or WASD | Drag anywhere (a floating stick), or tilt the phone |
 | Step once (classic levels) | Tap a direction | Quick tap towards where you want to go |
-| Dash *(skill)* | `SPACE` | Tap the DASH dial |
-| Nova pulse *(skill)* | `E` | Tap the NOVA dial |
+| Top button: Overdrive *(skill)*, or pocket 1 | `SPACE` or `1` | Tap it |
+| Middle button: Nova pulse *(skill)*, or pocket 2 | `E` or `2` | Tap it |
+| Bottom button: pocket 3 | `C` or `3` | Tap it |
 | Pause | `ESC` or `P` | Back button |
 | Music on/off | `M` | Volumes are in OPTIONS |
 | Fullscreen | `F11` | |
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
+
+The three action buttons run down one edge of the field - top, middle, bottom - on the right, or on
+the left if the picture has been slid left to put the joystick pad on the right.
 
 ### Options
 
@@ -64,6 +77,8 @@ On the title screen and in the pause menu.
 
 ## How a run works
 
+(This is the campaign. The arcades and Endless differ as described further down.)
+
 1. **Level 1 is always the original**: classic tile movement, no twists, `E` and `S`.
 2. Every level after that rolls **1 to 5 rules**: one movement mode plus up to four modifiers. Early
    levels roll few rules, later levels roll more. The briefing deals them out on a **slot machine**:
@@ -72,7 +87,7 @@ On the title screen and in the pause menu.
    press stops them all if you are in a hurry.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
 4. Eat the level's **quota** of stars to clear it. The quota grows every level.
-5. Every tenth level is a **boss**.
+5. Every tenth level is a **boss**. The third one, on level 30, is the end of the campaign.
 6. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
 
 Every boss is a **checkpoint**: once you have beaten the one on level 10, a FROM LEVEL button
@@ -81,10 +96,13 @@ appears next to PLAY and new runs can start on level 11 (then 21, and so on) ins
 At the start of a level the `o` beams in, and wears a marker until you first move, so there is no
 doubt which thing on the screen is you.
 
-It is endless: there is no last level, only how far you got.
-
 Within a level, enemies start slow and single, then keep arriving, speeding up and getting smarter
-the longer you take. Across levels, all of those numbers scale up too.
+the longer you take. Across levels, all of those numbers scale up too: steeply over the first ten
+levels, while everything is new, and only gently after that, so the back two thirds of the campaign
+are a matter of practice rather than a wall.
+
+In the dark levels (Dark Nebula, Lights Out) there are fewer enemies and they are a little slower,
+and anything outside your light shows as a pair of eyes, so nothing arrives out of nowhere.
 
 ### Movement modes
 
@@ -181,11 +199,11 @@ second countdown until it opens again. Any boss can use it: it is one call, `Wor
 Every star counts one towards the quota; the value is what goes into your score and your stardust.
 Eat stars in quick succession to build a combo multiplier (up to x9).
 
-### Arcade mode
+### The arcades and Endless
 
-**ARCADE** on the title screen is the same endless run with the skill tree left at home. You start
-with nothing, and your kit is whatever you pick up: power-ups turn up on the field every ten seconds
-or so as tilted squares, and blink out again if you leave them lying.
+**Arcade Matrix**, **Arcade Flow** and **Endless** leave the skill tree at home. Your kit is whatever
+you pick up, plus whatever is in your pockets. Power-ups turn up on the field every ten seconds or
+so as tilted squares, and blink out again if you leave them lying.
 
 | Power-up | Lasts | Effect |
 |---|---|---|
@@ -194,29 +212,53 @@ or so as tilted squares, and blink out again if you leave them lying.
 | Lucky Stars | the run, stacks x3 | Rare stars turn up more often. |
 | Shield | 20 s | Soaks one hit. Popped is popped. |
 | Magnet | 15 s | Stars drift towards you. |
-| Blink Dash | 25 s | The dash, for as long as it lasts. |
+| Overdrive | 8 s | 30% faster, straight away. |
 | Wrap Echo | 20 s | Wrapping leaves a decoy behind. |
-| Nova | until fired | One stun blast, held in the tank. |
+| Supply Drop | at once | Puts a random item in an empty pocket. |
 
 The clocks only run while you are playing, and carry over from one level to the next. What you are
 carrying is shown bottom left: timed ones wear a ring that drains, permanent ones show a pip per
-stack. Arcade runs still bank stardust, and they have a high-score board of their own.
+stack. These runs still bank stardust, and each mode has a high-score board of its own.
+
+#### Pockets
+
+You have **three pockets**, each holding one single-use item, and they are the three action buttons.
+Before the run you pack them out of your banked stardust. After every fifth level there is a **pit
+stop** to restock - but a pit stop only takes what *this run* has earned so far, so it is always a
+choice between spending it now and banking it, and every purchase on a run puts the prices up a
+quarter. Anything bought on a visit can be put back before you leave.
+
+| Item | Price | Effect |
+|---|---|---|
+| Overdrive | 30 | 30% faster for six seconds. |
+| Stun Blast | 40 | Freezes everything near you. |
+| Wipe | 70 | Clears the field of enemies. Bosses only stagger. |
+| Flare | 25 | Lights a dark level for twelve seconds, and dazzles the enemies (they lose you) for a few. |
+| Shield Cell | 50 | Soaks one hit. Not on a clock: it waits until it is needed. |
+| Star Pull | 45 | Every star on the field flies to you. |
+
+A run that never uses anything from its pockets is a **pure run**, and gets a diamond on the board.
+
+#### Endless
+
+One arena - a way of moving, two twists, three kinds of hostile - dealt once from the seed and kept.
+There is no clearing it: each quota of stars is a **wave**, and each wave makes the level's numbers
+those of the next level up, in place, without stopping. The tune runs three per cent faster every
+wave.
 
 ### Skill tree and the boards
 
 Stardust buys permanent skills across three branches:
 
 - **Hull** - shields that recharge each level, a once-per-run revive, in-level shield regrowth.
-- **Engine** - speed, a blink dash, and *Wrap Echo*: wrapping leaves an afterimage enemies chase.
+- **Engine** - speed, the *Overdrive* button (30% faster for six seconds, then a breather), and
+  *Wrap Echo*: wrapping leaves an afterimage enemies chase.
 - **Maw** - a star magnet, longer combos, rarer stars, more stardust, and the Nova Pulse stun.
 
-There are four high-score boards:
-
-- **Open** takes every run.
-- **Mastered** only takes runs played with the complete tree, so everyone on it has identical kit
-  and the only variable left is the player.
-- **Seed** lists the runs on one seed key, so everyone on it played identical levels.
-- **Arcade** lists arcade runs, which have no skill tree at all.
+There is a high-score board for each mode - **Campaign**, **Matrix**, **Flow**, **Endless** - and a
+**Seed** board listing the campaign runs on one seed key, where everyone played identical levels.
+Two marks do the work that more boards would: a gold star is a campaign run played with the complete
+skill tree, and a diamond is an arcade or endless run that never used its pockets.
 
 Initials go in on three wheels: slide up or down anywhere to turn the lit one, tap to the left or
 right of them to move along (or just type).
@@ -246,7 +288,9 @@ Scores are stored on the device only; comparing with a friend means comparing sc
 
 All of it is synthesised by the game at start-up: pulse, triangle, saw and noise voices in
 `core/.../audio/Synth.kt`, with the effects and the six looping tunes written as code in
-`Sounds.kt`. Tunes are streamed from memory a block at a time rather than handed to the platform's
+`Sounds.kt`. The two arcades and Endless each have a tune of their own, all three of them the
+original tune dressed differently: tightened into runs of sixteenths for Matrix, slowed and held for
+Flow, looped over a galloping bass for Endless. Tunes are streamed from memory a block at a time rather than handed to the platform's
 music player, because that is the only way to get a loop with no hiccup at the seam on a phone. After a run, the title tune comes back an octave down and low-passed, as if from the
 next room, once the game-over jingle has had its say. There are no audio files in the repository. `./gradlew core:test` also drops every
 effect and tune as a WAV into `core/build/synth-preview/`, to listen to without launching the game.
@@ -310,7 +354,9 @@ The `android` module is only included in the build when an Android SDK is config
 
 The game is landscape, draws to a fixed 960x540 virtual canvas that scales to any screen, and
 rasterises its font at the device's real resolution. It keeps the screen awake while it is open
-(tilt steering means nobody touches it for minutes) and asks for one permission, `VIBRATE`.
+(tilt steering means nobody touches it for minutes), holds the screen the way up it is for as long
+as a level is being played (so leaning the phone to steer cannot flip the picture), and asks for
+one permission, `VIBRATE`.
 
 The launcher icons and the desktop window icons are cut from one image,
 `core/src/main/resources/images/StarEaterIcon1.png`. After changing it, regenerate them (needs
@@ -331,15 +377,17 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 
 | Key | Meaning |
 |---|---|
-| `screen` | `menu`, `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options` |
+| `screen` | `menu`, `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options`, `pack`, `pitstop` |
 | `level` | Level number to scale difficulty for |
 | `move` | `GRID`, `GLIDE`, `SCROLL` or `ORBIT` |
 | `mods` | Comma-separated rule ids: `fog,walls,shy,decay,swarm,countdown,meteors,restless,tail,gravity,inversion,deep,lightsout` |
 | `roster` | Comma-separated enemy ids: `eater,stalker,bouncer,zoomer,warper,hive` |
 | `boss` | Jump into a boss level: `devourer`, `leviathan` or `warden` |
 | `skills=all` | Start with the full skill tree |
-| `arcade=1` | Make it an arcade run |
-| `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,dash,echo,nova` |
+| `mode` | `matrix`, `flow` or `endless` (the campaign otherwise) |
+| `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,overdrive,echo` |
+| `items` | Up to three pocket items: `overdrive,stun,wipe,flare,shield,pull` |
+| `won=1` | With `screen=over`: show the campaign-complete ending |
 | `align` | Screen position: `-1` left, `0` centre, `1` right |
 | `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |
 | `window` | Window size, e.g. `1600x720`, to try screens that are not 16:9 |

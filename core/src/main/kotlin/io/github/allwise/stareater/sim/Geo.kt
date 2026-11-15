@@ -53,13 +53,14 @@ class InputState {
     /** Direction currently held down, for key-repeat style stepping. */
     var held: Dir? = null
 
-    /** Edge-triggered ability buttons. */
-    var dash = false
-    var nova = false
+    /**
+     * The three action buttons - top, middle and bottom - edge-triggered. In the campaign the first
+     * two are Overdrive and the Nova; on an arcade or endless run they are the three pockets.
+     */
+    val slots = BooleanArray(3)
 
     fun clearEdges() {
         taps.clear()
-        dash = false
-        nova = false
+        slots.fill(false)
     }
 }

@@ -17,7 +17,7 @@ enum class Sfx(val gain: Float) {
 }
 
 /** The looping tunes. One per movement mode, plus the menu, the boss, and the quiet one after a run. */
-enum class Tune(val gain: Float = 1f) { MENU, CLASSIC, GLIDE, SCROLL, ORBIT, BOSS, AFTER(0.8f) }
+enum class Tune(val gain: Float = 1f) { MENU, CLASSIC, GLIDE, SCROLL, ORBIT, BOSS, AFTER(0.8f), MATRIX, FLOW, ENDLESS }
 
 /**
  * The game's sound, written as code. Effects are little recipes of slides and noise bursts; tunes
@@ -330,6 +330,81 @@ object Sounds {
                     Voice(Wave.TRI, 0.34f, basses(2, GALLOP, *chords)),
                 ),
                 drums("K . K . S . K K . K K . S . S S"),
+            )
+        }
+        // The three below are the original tune again, each time dressed differently.
+        //
+        // Arcade Matrix: the classic tightened up. Faster, a thinner and sharper lead, and every
+        // long note of the original turned into a run of sixteenths, over a bass that never rests.
+        Tune.MATRIX -> {
+            val chords = arrayOf("Am", "Am", "F", "G", "Am", "Am", "F", "E")
+            val lead = bars(
+                "A4 . C5 . E5 . C5 . A4 C5 E5 A5 E5 - - .",
+                "A5 . G5 . E5 . C5 . D5 E5 D5 C5 A4 - - .",
+                "F4 . A4 . C5 . A4 . F4 A4 C5 F5 C5 - - .",
+                "G4 . B4 . D5 . B4 . G5 F5 D5 B4 G4 - B4 .",
+                "A4 . C5 . E5 . C5 . A4 C5 E5 A5 E5 - - .",
+                "A5 . G5 . E5 . G5 . A5 C6 A5 G5 E5 - - .",
+                "F5 . E5 . C5 . A4 . C5 F5 A5 C6 A5 - - .",
+                "E5 . G#5 . B5 . G#5 . E5 D5 B4 G#4 E4 - G#4 .",
+            )
+            Synth.song(
+                152,
+                listOf(
+                    Voice(Wave.PULSE25, 0.19f, lead, decay = 5f, wet = true),
+                    Voice(Wave.PULSE12, 0.07f, arps(4, UP, *chords), decay = 14f, wet = true),
+                    Voice(Wave.TRI, 0.33f, basses(2, DRIVE, *chords)),
+                ),
+                drums("K . H . K . H S K . H . K . S S"),
+            )
+        }
+        // Arcade Flow: the same melody with the corners taken off. Slower, every note held and
+        // leaning into the next, rolling arpeggios underneath.
+        Tune.FLOW -> {
+            val chords = arrayOf("Am", "Am", "F", "G", "Am", "Am", "F", "E")
+            val lead = bars(
+                "A4 - - - C5 - E5 - - - C5 - A4 - - -",
+                "A5 - - - G5 - E5 - - - C5 - D5 - E5 -",
+                "F4 - - - A4 - C5 - - - A4 - F4 - - -",
+                "G4 - - - B4 - D5 - - - G5 - F5 - D5 -",
+                "A4 - - - C5 - E5 - - - A5 - E5 - - -",
+                "A5 - - - G5 - E5 - G5 - A5 - C6 - - -",
+                "F5 - - - E5 - C5 - A4 - C5 - F5 - A5 -",
+                "E5 - - - G#5 - B5 - - - G#5 - E5 - D5 -",
+            )
+            Synth.song(
+                120,
+                listOf(
+                    Voice(Wave.PULSE25, 0.18f, lead, decay = 1.3f, vibrato = 0.2f, wet = true),
+                    Voice(Wave.TRI, 0.13f, lead, decay = 1.3f, vibrato = 0.2f, wet = true),
+                    Voice(Wave.PULSE12, 0.07f, arps(4, UP_DOWN, *chords), decay = 8f, wet = true),
+                    Voice(Wave.TRI, 0.3f, basses(2, PULSE, *chords)),
+                ),
+                drums("K . . H . . H . K . . H S . H ."),
+            )
+        }
+        // Endless: the opening figure of the original, round and round over a galloping bass. It is
+        // written to be hurried: the game speeds it up as the level gets worse.
+        Tune.ENDLESS -> {
+            val chords = arrayOf("Am", "F", "G", "Am", "Am", "F", "G", "E")
+            val lead = bars(
+                "A4 . A4 C5 . E5 . C5 A4 . A4 C5 . E5 - .",
+                "F4 . F4 A4 . C5 . A4 F4 . F4 A4 . C5 - .",
+                "G4 . G4 B4 . D5 . B4 G4 . G4 B4 . D5 - .",
+                "A4 . C5 . E5 . A5 . G5 . E5 . C5 - A4 .",
+                "A5 . A5 E5 . C5 . E5 A5 . A5 E5 . C5 - .",
+                "F5 . F5 C5 . A4 . C5 F5 . F5 C5 . A4 - .",
+                "G5 . G5 D5 . B4 . D5 G5 . G5 D5 . B4 - .",
+                "E5 . G#5 . B5 . E6 . D6 . B5 . G#5 - E5 .",
+            )
+            Synth.song(
+                132,
+                listOf(
+                    Voice(Wave.SQUARE, 0.18f, lead, decay = 4.5f, wet = true),
+                    Voice(Wave.PULSE12, 0.07f, arps(4, STAB, *chords), decay = 12f, wet = true),
+                    Voice(Wave.TRI, 0.33f, basses(2, GALLOP, *chords)),
+                ),
+                drums("K . H . S . H K . K H . S . H H"),
             )
         }
         // After the run: the title tune's chords again, an octave down, slower, no drums, and with

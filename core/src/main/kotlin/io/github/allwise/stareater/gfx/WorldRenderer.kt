@@ -15,6 +15,7 @@ import io.github.allwise.stareater.sim.EnemyType
 import io.github.allwise.stareater.sim.Fx
 import io.github.allwise.stareater.sim.Geo
 import io.github.allwise.stareater.sim.Hive
+import io.github.allwise.stareater.sim.Item
 import io.github.allwise.stareater.sim.Leviathan
 import io.github.allwise.stareater.sim.LevelSpec
 import io.github.allwise.stareater.sim.Mite
@@ -86,6 +87,9 @@ class WorldRenderer(private val g: Gfx) {
 
     /** Seconds since this level's player beamed in. */
     private var arrive = 99f
+
+    /** Which edge the action buttons are drawn on. */
+    var buttonsLeft = false
     private var world: World? = null
 
     // Camera: centre of the view in tiles, and the size of the world it is looking at.
@@ -150,14 +154,36 @@ class WorldRenderer(private val g: Gfx) {
                 ring(e.x, e.y, 2.5f, 0.4f, Pal.PLAYER)
                 flashWith(Pal.RED, 0.45f)
             }
-            is Fx.Dash -> {
-                val ddx = w.dx(e.x0, e.x1, true)
-                val ddy = w.dy(e.y0, e.y1, true)
-                for (i in 0..12) {
-                    val t = i / 12f
-                    spark(e.x0 + ddx * t, e.y0 + ddy * t, 0f, 0f, 0.4f, 4.5f, Pal.CYAN)
+            is Fx.Overdrive -> {
+                burst(e.x, e.y, 16, Pal.CYAN, 5f)
+                ring(e.x, e.y, 2f, 0.35f, Pal.CYAN)
+                flashWith(Pal.CYAN, 0.1f)
+            }
+            is Fx.ItemUsed -> {
+                val c = PowerArt.color(e.item)
+                pops += Pop(e.item.title, 1f, c)
+                when (e.item) {
+                    Item.WIPE -> {
+                        shake = max(shake, 12f)
+                        flashWith(Pal.WHITE, 0.45f)
+                    }
+                    Item.FLARE -> {
+                        flashWith(Pal.STAR, 0.5f)
+                        ring(e.x, e.y, 14f, 0.8f, Pal.STAR)
+                    }
+                    Item.PULL -> {
+                        ring(e.x, e.y, 9f, 0.5f, c)
+                        flashWith(c, 0.15f)
+                    }
+                    Item.SHIELD -> ring(e.x, e.y, 2.2f, 0.4f, c)
+                    else -> {}
                 }
-                ring(e.x1, e.y1, 1.2f, 0.25f, Pal.CYAN)
+            }
+            is Fx.Wave -> {
+                pops += Pop("WAVE ${e.number}", 1.3f, Pal.GOLD)
+                flashWith(Pal.GOLD, 0.2f)
+                val p = w.player
+                repeat(4) { fireworks += Firework(p.x + rnd.nextFloat() * 14f - 7f, p.y + rnd.nextFloat() * 8f - 4f, 0.1f + 0.15f * it, PARTY[it % PARTY.size]) }
             }
             is Fx.Nova -> {
                 ring(e.x, e.y, e.radius, 0.5f, Pal.GOLD)
@@ -204,7 +230,8 @@ class WorldRenderer(private val g: Gfx) {
                 ring(e.x, e.y, 1.4f, 0.3f, Pal.WHITE)
                 flashWith(c, 0.14f)
                 val stack = w.arcade?.stacks(e.kind) ?: 0
-                pops += Pop(if (e.kind.permanent) "${e.kind.title}  x$stack" else e.kind.title, 1.1f, c)
+                val gift = e.item
+                pops += Pop(if (gift != null) "POCKETED: ${gift.title}" else if (e.kind.permanent) "${e.kind.title}  x$stack" else e.kind.title, 1.1f, c)
             }
             is Fx.PowerLost -> {
                 val p = w.player
@@ -820,10 +847,25 @@ class WorldRenderer(private val g: Gfx) {
         // The serpent's body is long: draw it even when the head is out of sight.
         if (e.type === Leviathan) serpentBody(w, e)
         val vis = if (boss) max(0.35f, vis(w, e.x, e.y)) else vis(w, e.x, e.y)
-        if (vis <= 0f) return
         val base = enemyColor(e.type)
         val ex = bx(w, e)
         val ey = by(w, e)
+        if (w.fogRadius > 0f && vis < 0.3f && !boss) {
+            // Out in the dark you cannot see what it is - but you can see that it is there. A pair of
+            // eyes, brighter the nearer they are, so nothing arrives out of nowhere.
+            val near = (1f - (w.dist(e.x, e.y, w.player.x, w.player.y) - w.fogRadius) / 9f).coerceIn(0f, 1f)
+            val glint = (0.3f + 0.7f * near) * (if (e.spawnT > 0f) 0.5f + 0.5f * MathUtils.sin(time * 20f) else 1f)
+            if (glint > 0.02f && vis <= 0.3f) {
+                val blink = if (MathUtils.sin(time * 0.9f + e.seed * 7f) > 0.97f) 0.15f else 1f
+                at(ex, ey, 20f) { x, y ->
+                    g.glow(x, y, 14f, base, 0.35f * glint * blink)
+                    g.circle(x - 3.5f, y + 1f, 1.8f, base, glint * blink)
+                    g.circle(x + 3.5f, y + 1f, 1.8f, base, glint * blink)
+                }
+            }
+            if (vis <= 0f) return
+        }
+        if (vis <= 0f) return
         val scale = if (boss) BOSS_SCALE else if (e.type === Mite) 0.6f else 1f
         val margin = 30f * scale
         // Letters on the grid, creatures everywhere else. Bosses are always creatures.
@@ -888,7 +930,7 @@ class WorldRenderer(private val g: Gfx) {
                 val bounce = if (e.tween < 1f) MathUtils.sin(e.tween * MathUtils.PI) * 3f else 0f
                 g.glyphAt(g.glyph, e.type.glyph, x, y + bounce, tmp, a)
             }
-            if (stunned || e.slow > 0f) {
+            if (stunned || e.slow > 0f || (w.dazzle > 0f && !boss && !e.ballistic)) {
                 for (i in 0 until 3) {
                     val ang = time * 260f + i * 120f
                     g.circle(x + MathUtils.cosDeg(ang) * 14f * scale, y + 10f * scale + MathUtils.sinDeg(ang) * 4f, 2f, Pal.GOLD, a)
@@ -955,6 +997,11 @@ class WorldRenderer(private val g: Gfx) {
                 g.ring(x, y, 14f + 34f * t, 2f, Pal.CYAN, 0.75f * (1f - t), add = true)
                 val top = y + 26f + 4f * MathUtils.sin(time * 6f)
                 g.triangle(x - 8f, top + 11f, x + 8f, top + 11f, x, top, Pal.CYAN, 0.9f)
+            }
+            if (w.boosting) {
+                // Overdrive: afterimages strung out behind, and a hotter glow.
+                for (i in 1..3) g.ring(x - p.faceX * i * 9f, y - p.faceY * i * 9f, 8.5f - i, 3f, Pal.CYAN, (0.5f - i * 0.13f) * a, add = true)
+                g.glow(x, y, 60f, Pal.CYAN, 0.5f * a)
             }
             g.glow(x, y, 38f + 22f * eatPulse, tint, (0.6f + 0.3f * eatPulse) * a)
             g.circle(x, y, 8.5f * gulp, Pal.BG, a)
@@ -1112,7 +1159,7 @@ class WorldRenderer(private val g: Gfx) {
         g.text(g.big, "LV ${w.spec.number}", 14f, top - 8f, Pal.TEXT)
         val lvW = g.width(g.big, "LV ${w.spec.number}")
         var ix = 14f + lvW + 20f
-        for (i in 0 until w.loadout.shields) {
+        for (i in 0 until max(w.loadout.shields, w.player.shields)) {
             g.ring(ix, top - 20f, 7f, 2.5f, Pal.SHIELD, if (i < w.player.shields) 1f else 0.2f)
             ix += 20f
         }
@@ -1126,8 +1173,9 @@ class WorldRenderer(private val g: Gfx) {
         g.text(g.tiny, tags, 14f, FIELD_H + 18f, Pal.CYAN)
         var tx = 14f + g.width(g.tiny, tags) + 24f
         if (w.arcade != null) {
-            g.text(g.tiny, "ARCADE", tx, FIELD_H + 18f, Pal.GOLD)
-            tx += g.width(g.tiny, "ARCADE") + 24f
+            val mode = if (w.run.mode.arcade) w.run.mode.title else "ARCADE"
+            g.text(g.tiny, mode, tx, FIELD_H + 18f, Pal.GOLD)
+            tx += g.width(g.tiny, mode) + 24f
         }
         if (w.run.key.isNotEmpty()) g.text(g.tiny, "SEED ${SeedKey.pretty(w.run.key)}", tx, FIELD_H + 18f, Pal.DIM, 0.8f)
         w.arcade?.let { kit(it) }
@@ -1162,14 +1210,21 @@ class WorldRenderer(private val g: Gfx) {
             g.rect(Gfx.W - 14f - 90f * t, FIELD_H + 5f, 90f * t, 3f, c)
         }
 
-        // Ability dials, bottom right of the field. They double as touch buttons.
-        if (w.loadout.dash) {
-            val ready = 1f - (w.player.dashCd / w.dashCooldown).coerceIn(0f, 1f)
-            dial(DASH_X, DIAL_Y, ready, "DASH", if (keyHints) "SPACE" else "", Pal.CYAN)
-        }
-        if (w.loadout.nova) {
-            val charge = w.player.novaCharge.toFloat() / World.NOVA_COST
-            dial(NOVA_X, DIAL_Y, charge, "NOVA", if (keyHints) "E" else "", Pal.GOLD)
+        // The three action buttons, down one edge of the field: top, middle, bottom. They double as
+        // touch buttons, and sit on the side away from the joystick pad.
+        val bx0 = buttonX(buttonsLeft)
+        if (w.run.mode.arcade) {
+            for (i in 0 until Item.POCKETS) pocket(bx0, BUTTON_Y[i], w.run.pockets[i], if (keyHints) "${i + 1}" else "")
+        } else {
+            if (w.loadout.overdrive) {
+                val on = w.overdrive > 0f
+                val fill = if (on) w.overdrive / w.overdriveTime else 1f - (w.player.boostCd / w.overdriveCooldown).coerceIn(0f, 1f)
+                dial(bx0, BUTTON_Y[0], fill, if (on) "GO!" else "BOOST", if (keyHints) "SPACE" else "", Pal.CYAN)
+            }
+            if (w.loadout.nova) {
+                val charge = w.player.novaCharge.toFloat() / World.NOVA_COST
+                dial(bx0, BUTTON_Y[1], charge, "NOVA", if (keyHints) "E" else "", Pal.GOLD)
+            }
         }
 
         // Shards from eaten stars, homing in on the quota counter.
@@ -1199,12 +1254,27 @@ class WorldRenderer(private val g: Gfx) {
         }
     }
 
+    /** One pocket: the item in it, or an empty ring. */
+    private fun pocket(x: Float, y: Float, item: Item?, hint: String) {
+        g.circle(x, y, DIAL_R, Pal.PANEL, 0.55f)
+        if (item == null) {
+            g.ring(x, y, DIAL_R, 2f, Pal.LINE, 0.5f)
+            if (hint.isNotEmpty()) g.text(g.tiny, hint, x, y + 5f, Pal.DIM, 0.4f, Align.center)
+            return
+        }
+        val c = PowerArt.color(item)
+        g.ring(x, y, DIAL_R, 3.5f, c, 0.75f + 0.25f * MathUtils.sin(time * 5f))
+        powerArt.item(item, x, y + 2f, 13f, time, 1f)
+        if (hint.isNotEmpty()) g.text(g.tiny, hint, x + DIAL_R - 4f, y - DIAL_R + 12f, Pal.DIM, 0.8f, Align.center)
+    }
+
     /** Arcade mode: what you are carrying, bottom left. Timed ones wear a ring that drains. */
     private fun kit(a: Arcade) {
-        var x = 30f
+        // Clear of the action buttons, if those are on this side.
+        var x = if (buttonsLeft) 106f else 30f
         val y = 30f
         for (k in PowerUp.values()) {
-            if (k == PowerUp.NOVA || !a.active(k)) continue
+            if (!a.active(k)) continue
             val c = PowerArt.color(k)
             g.circle(x, y, 17f, Pal.PANEL, 0.6f)
             if (k.timed) {
@@ -1242,9 +1312,12 @@ class WorldRenderer(private val g: Gfx) {
         const val FIELD_W = 960f
         const val FIELD_H = 480f
         const val DIAL_R = 30f
-        const val DIAL_Y = 48f
-        const val DASH_X = 908f
-        const val NOVA_X = 834f
+
+        /** The three action buttons: top, middle and bottom of the field. */
+        val BUTTON_Y = floatArrayOf(404f, 240f, 76f)
+
+        /** They hug the right-hand edge, unless the joystick pad is over there. */
+        fun buttonX(left: Boolean): Float = if (left) 44f else Gfx.W - 44f
         const val BOSS_SCALE = 3.4f
         private const val SPECKS = 110
         private const val STREAK_TIME = 0.4f

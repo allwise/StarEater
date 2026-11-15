@@ -7,7 +7,8 @@ import kotlin.random.Random
 
 /** Everything needed to build one level: which rules are in play, and how hard the numbers are. */
 class LevelSpec(
-    val number: Int,
+    /** The level number the difficulty is scaled for. Only the endless mode ever changes it. */
+    var number: Int,
     val move: MoveKind,
     /** Ids of the modifier rules, see [Rules]. */
     val modifiers: List<String>,
@@ -53,24 +54,35 @@ object LevelGen {
     /**
      * Rolls level [n]. Level 1 is always the bare original: classic movement, no modifiers, E and S.
      * After that everything is random, with the rule count and the numbers scaling with [n].
+     *
+     * The mode narrows the choice: Matrix only ever deals the classic grid, Flow never does.
      */
-    fun generate(n: Int, rng: Random, prevMove: MoveKind? = null): LevelSpec {
-        if (n <= 1) return build(1, MoveKind.GRID, emptyList(), listOf(Eater, Stalker))
-        if (n % LevelSpec.BOSS_EVERY == 0) return bossLevel(n, rng)
+    fun generate(n: Int, rng: Random, prevMove: MoveKind? = null, mode: GameMode = GameMode.CAMPAIGN): LevelSpec {
+        if (mode == GameMode.ENDLESS) return endless(rng)
+        if (n <= 1) return build(1, if (mode == GameMode.FLOW) MoveKind.GLIDE else MoveKind.GRID, emptyList(), listOf(Eater, Stalker))
+        if (n % LevelSpec.BOSS_EVERY == 0) {
+            return bossLevel(n, rng, move = when (mode) { GameMode.MATRIX -> MoveKind.GRID; GameMode.FLOW -> MoveKind.GLIDE; else -> null })
+        }
 
         // Movement: any unlocked mode, but lean away from repeating the previous one.
-        val moves = MoveKind.values().filter { it != MoveKind.ORBIT || n >= 3 }
+        val moves = MoveKind.values().filter {
+            (it != MoveKind.ORBIT || n >= 3) && when (mode) {
+                GameMode.MATRIX -> it == MoveKind.GRID
+                GameMode.FLOW -> it != MoveKind.GRID
+                else -> true
+            }
+        }
         val move = pick(rng, moves) { if (it == prevMove) 0.35f else 1f }
 
         val maxRules = when {
             n <= 3 -> 2
             n <= 6 -> 3
-            n <= 10 -> 4
+            n <= 14 -> 4
             else -> LevelSpec.MAX_RULES
         }
         val minRules = when {
             n <= 5 -> 1
-            n <= 12 -> 2
+            n <= 16 -> 2
             else -> 3
         }
         val wanted = minRules + rng.nextInt(maxRules - minRules + 1) - 1 // minus the movement rule
@@ -93,22 +105,43 @@ object LevelGen {
     }
 
     /**
-     * The level a run is currently on. Depends only on the run's seed and level number, so every
-     * player on the same seed key is dealt exactly the same sequence.
+     * The one level an endless run is played on: a way of moving, two twists and three kinds of
+     * hostile, dealt once and kept. Only the numbers change after that, see [scale].
      */
-    fun forRun(run: RunState): LevelSpec = forSeed(run.seed, run.level)
+    fun endless(rng: Random): LevelSpec {
+        val move = pick(rng, MoveKind.values().toList()) { 1f }
+        val pool = Rules.all.filter { move in it.moves }.toMutableList()
+        val mods = ArrayList<String>()
+        while (mods.size < 2 && pool.isNotEmpty()) {
+            val chosen = pool.removeAt(rng.nextInt(pool.size))
+            mods += chosen.id
+            pool.removeAll { it.id in chosen.conflicts || chosen.id in it.conflicts }
+        }
+        val available = Enemies.roster.toMutableList()
+        val roster = ArrayList<EnemyType>()
+        while (roster.size < 3) roster += available.removeAt(rng.nextInt(available.size))
+        if (roster.none { it in Enemies.hunters }) roster[0] = pick(rng, Enemies.hunters) { 1f }
+        return build(1, move, mods, roster.sortedBy { Enemies.all.indexOf(it) })
+    }
+
+    /**
+     * The level a run is currently on. Depends only on the run's seed, mode and level number, so
+     * every player on the same seed key is dealt exactly the same sequence.
+     */
+    fun forRun(run: RunState): LevelSpec = forSeed(run.seed, run.level, run.mode)
 
     /**
      * Level [n] of a seed. A level leans away from repeating the movement mode of the one before
      * it, so the levels are dealt in order from the first: that way level 17 is the same level 17
-     * whether you played your way there, started from a checkpoint, or loaded it from a saved slot.
+     * whether you played your way there or started from a checkpoint.
      */
-    fun forSeed(seed: Long, n: Int): LevelSpec {
+    fun forSeed(seed: Long, n: Int, mode: GameMode = GameMode.CAMPAIGN): LevelSpec {
+        if (mode == GameMode.ENDLESS) return endless(Random(seed * 31 + 7919L)).also { scale(it, n) }
         var prev: MoveKind? = null
-        var spec = generate(1, Random(seed * 31 + 7919L), null)
+        var spec = generate(1, Random(seed * 31 + 7919L), null, mode)
         for (i in 2..n) {
             prev = spec.move
-            spec = generate(i, Random(seed * 31 + i * 7919L), prev)
+            spec = generate(i, Random(seed * 31 + i * 7919L), prev, mode)
         }
         return spec
     }
@@ -129,26 +162,38 @@ object LevelGen {
     }
 
     /** Builds a spec for an explicit rule set, with numbers scaled for level [n]. */
-    fun build(n: Int, move: MoveKind, mods: List<String>, roster: List<EnemyType>): LevelSpec {
-        val s = LevelSpec(n, move, mods, roster)
+    fun build(n: Int, move: MoveKind, mods: List<String>, roster: List<EnemyType>): LevelSpec =
+        LevelSpec(n, move, mods, roster).also { scale(it, n) }
+
+    /**
+     * Sets a spec's numbers for level [n]. The first ten levels climb steeply, as a run should when
+     * everything is new; from there on the slope is gentle, so that the back two thirds of the
+     * campaign are a matter of practice rather than a wall.
+     *
+     * Safe to call again on a spec that is already in play, which is how the endless mode gets harder.
+     */
+    fun scale(s: LevelSpec, n: Int) {
+        s.number = n
         val k = n - 1
-        s.quota = min(60, 8 + 2 * k)
-        s.starsOnField = when (move) {
+        // "Early" is the part of the curve up to the first boss; "late" is everything past it.
+        val early = min(k, STEEP)
+        val late = max(0, k - STEEP)
+        s.quota = 8 + 2 * early + late
+        if (s.quota > 46) s.quota = 46
+        s.starsOnField = when (s.move) {
             MoveKind.SCROLL -> 5 + min(3, n / 5)
             MoveKind.ORBIT -> 4 + min(3, n / 4)
             else -> 2 + min(3, n / 4)
         }
-        if (move == MoveKind.ORBIT) {
-            // A solar system needs room: bigger than the screen, so the camera follows.
-            s.width = 40
-            s.height = 26
-        }
-        s.enemyStart = 1 + min(3, k / 4)
-        s.enemyMax = min(14, 3 + (k * 0.7f).toInt())
-        s.spawnInterval = max(3.5f, 11f - 0.5f * k)
-        s.enemySpeed = 2f + 4.6f * (1f - exp(-k / 10f))
-        s.iqBase = min(0.85f, 0.08f + 0.06f * k)
-        s.scrollSpeed = min(4.5f, 1.8f + 0.15f * k)
+        // A solar system needs room: bigger than the screen, so the camera follows.
+        s.width = if (s.move == MoveKind.ORBIT) 40 else LevelSpec.FIELD_W
+        s.height = if (s.move == MoveKind.ORBIT) 26 else LevelSpec.FIELD_H
+        s.enemyStart = 1 + min(3, k / 6)
+        s.enemyMax = min(12, 3 + (early * 0.7f).toInt() + late / 4)
+        s.spawnInterval = max(4.5f, 11f - 0.5f * early - 0.1f * late)
+        s.enemySpeed = 2f + 4.6f * (1f - exp(-early / 10f)) + 0.035f * late
+        s.iqBase = min(0.85f, 0.08f + 0.06f * early + 0.012f * late)
+        s.scrollSpeed = min(4.5f, 1.8f + 0.15f * early + 0.05f * late)
 
         s.starWeights[StarType.COMMON.ordinal] = 1f
         s.starWeights[StarType.GOLD.ordinal] = min(0.25f, 0.10f + 0.01f * k)
@@ -156,9 +201,11 @@ object LevelGen {
         s.starWeights[StarType.PULSAR.ordinal] = if (n >= 3) 0.08f else 0f
         s.starWeights[StarType.NOVA.ordinal] = if (n >= 4) 0.035f else 0f
 
-        for (m in mods) Rules.byId(m).tune(s)
-        return s
+        for (m in s.modifiers) Rules.byId(m).tune(s)
     }
+
+    /** How many levels the steep part of the difficulty curve lasts. */
+    private const val STEEP = 8
 
     private fun <T> pick(rng: Random, items: List<T>, weight: (T) -> Float): T {
         var total = 0f

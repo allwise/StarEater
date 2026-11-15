@@ -15,7 +15,7 @@ import kotlin.math.sqrt
 /**
  * Turns keys, mouse and touch into an [InputState].
  *
- * Keyboard: arrows / WASD to move, SPACE dashes, E fires the nova.
+ * Keyboard: arrows / WASD to move; SPACE, E and C (or 1, 2, 3) are the three action buttons.
  * Touch: put a thumb down anywhere and drag - a floating stick. In the classic mode a quick tap
  * (no drag) steps once towards the tap. The two ability dials are tappable.
  * Tilt: lean the device the way you want to go. However it is being held when the level starts
@@ -27,8 +27,9 @@ class Controls {
     /** Where the player is on the canvas, so a tap can be read as "step that way". */
     var playerX = 0f
     var playerY = 0f
-    var dashEnabled = false
-    var novaEnabled = false
+    /** Which of the three action buttons have anything on them right now, and which side they are on. */
+    val slotOn = BooleanArray(3)
+    var buttonsLeft = false
 
     // Floating stick, in canvas pixels. Public so the screen can draw it.
     var stickOn = false
@@ -66,8 +67,9 @@ class Controls {
             return true
         }
         when (key) {
-            Keys.SPACE, Keys.Z, Keys.SHIFT_LEFT, Keys.SHIFT_RIGHT -> state.dash = true
-            Keys.E, Keys.X, Keys.CONTROL_LEFT, Keys.CONTROL_RIGHT -> state.nova = true
+            Keys.SPACE, Keys.Z, Keys.SHIFT_LEFT, Keys.SHIFT_RIGHT, Keys.NUM_1, Keys.NUMPAD_1 -> state.slots[0] = true
+            Keys.E, Keys.X, Keys.CONTROL_LEFT, Keys.CONTROL_RIGHT, Keys.NUM_2, Keys.NUMPAD_2 -> state.slots[1] = true
+            Keys.C, Keys.Q, Keys.NUM_3, Keys.NUMPAD_3 -> state.slots[2] = true
             else -> return false
         }
         return true
@@ -78,8 +80,14 @@ class Controls {
     }
 
     fun touchDown(x: Float, y: Float, pointer: Int) {
-        if (dashEnabled && hypot(x - WorldRenderer.DASH_X, y - WorldRenderer.DIAL_Y) < BUTTON_REACH) { state.dash = true; return }
-        if (novaEnabled && hypot(x - WorldRenderer.NOVA_X, y - WorldRenderer.DIAL_Y) < BUTTON_REACH) { state.nova = true; return }
+        val bx = WorldRenderer.buttonX(buttonsLeft)
+        for (i in slotOn.indices) {
+            // An empty button still swallows the tap, so a miss does not send the ship lurching off.
+            if (hypot(x - bx, y - WorldRenderer.BUTTON_Y[i]) < BUTTON_REACH) {
+                if (slotOn[i]) state.slots[i] = true
+                if (slotOn[i] || slotOn.any { it }) return
+            }
+        }
         if (stickPointer >= 0) return
         stickPointer = pointer
         stickOn = true
@@ -243,7 +251,7 @@ class Controls {
         private const val DEADZONE = 10f
         private const val STEP_THRESHOLD = 20f
         private const val TAP_TIME = 0.3f
-        private const val BUTTON_REACH = WorldRenderer.DIAL_R + 12f
+        private const val BUTTON_REACH = WorldRenderer.DIAL_R + 14f
 
         /** Radians of lean for full speed at normal sensitivity: about 17 degrees. */
         private const val FULL_TILT = 0.3f

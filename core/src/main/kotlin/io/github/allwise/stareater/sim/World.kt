@@ -50,6 +50,21 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     /** Set by Shy Stars: stars back away, and a star magnet has a fight on its hands. */
     var shyStars = false
 
+    /** Seconds of Overdrive left, from the button or from a pocket. */
+    var overdrive = 0f
+        private set
+
+    /** Seconds the enemies stay dazzled by a flare: they have lost you and are milling about. */
+    var dazzle = 0f
+        private set
+
+    /** How fast the player is right now, relative to a bare ship. */
+    val playerSpeed: Float
+        get() = loadout.speed * (if (overdrive > 0f || arcade?.active(PowerUp.OVERDRIVE) == true) OVERDRIVE_BOOST else 1f)
+
+    /** True while any kind of Overdrive is running, for the presentation layer. */
+    val boosting: Boolean get() = overdrive > 0f || arcade?.active(PowerUp.OVERDRIVE) == true
+
     /** Seconds on the Countdown clock, or negative when there is no clock. */
     var timeLeft = -1f
 
@@ -107,8 +122,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     init {
         if (spec.move == MoveKind.SCROLL) player.place(cols / 2 + 0.5f, 3.5f)
         else player.place(cols / 2 + 0.5f, rows / 2 + 0.5f)
-        player.shields = loadout.shields
-        if (arcade?.novaHeld == true) player.novaCharge = NOVA_COST
+        // Shields from the kit, plus any shield cells still switched on from earlier in the run.
+        player.shields = loadout.shields + run.shieldCells
         movement.setup(this)
         for (r in rules) r.setup(this)
         repeat(spec.starsOnField) { spawnStar(initial = true) }
@@ -137,8 +152,11 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
         val p = player
         p.invuln = max(0f, p.invuln - dt)
-        p.dashCd = max(0f, p.dashCd - dt)
+        p.boostCd = max(0f, p.boostCd - dt)
         p.echoCd = max(0f, p.echoCd - dt)
+        overdrive = max(0f, overdrive - dt)
+        dazzle = max(0f, dazzle - dt)
+        updateFlares(dt)
         if (loadout.shieldRegen && p.shields < loadout.shields) {
             p.shieldRegen += dt
             if (p.shieldRegen >= SHIELD_REGEN_TIME) {
@@ -150,8 +168,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         arcade?.let { updateArcade(it, dt) }
         updateSeal(dt)
         movement.updatePlayer(this, input, dt)
-        if (input.dash) dash()
-        if (input.nova) nova()
+        for (i in input.slots.indices) if (input.slots[i]) press(i)
         p.tick(dt)
 
         refreshFlow()
@@ -178,7 +195,15 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             if (comboTimer <= 0f) combo = 1
         }
 
-        if (phase == Phase.PLAYING && collected >= spec.quota) {
+        if (phase == Phase.PLAYING && collected >= spec.quota && run.mode == GameMode.ENDLESS) {
+            // Endless never clears: the quota is a wave, and each wave leaves the level harder.
+            run.score += clearBonus
+            run.dust += (3 + spec.number) * loadout.dustMul
+            run.level++
+            LevelGen.scale(spec, run.level)
+            collected = 0
+            fx += Fx.Wave(run.level)
+        } else if (phase == Phase.PLAYING && collected >= spec.quota) {
             phase = Phase.CLEARED
             phaseTime = 0f
             run.score += clearBonus
@@ -396,7 +421,15 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
                 if (wrapY) s.y = Geo.wrap(s.y + s.vy * dt, h)
             }
             val d = dist(s.x, s.y, p.x, p.y)
-            if (loadout.magnet > 0f && s.lit && d < loadout.magnet && d > 0.01f) {
+            if (s.pulled && d > 0.01f) {
+                // A Star Pull: straight to the player, whatever it was doing.
+                s.orbitR = 0f
+                s.vx = 0f; s.vy = 0f
+                val step = min(d, PULL_SPEED * dt)
+                s.x = Geo.wrap(s.x + dx(s.x, p.x, true) / d * step, w)
+                s.y += dy(s.y, p.y, true) / d * step
+                if (wrapY) s.y = Geo.wrap(s.y, h)
+            } else if (loadout.magnet > 0f && s.lit && d < loadout.magnet && d > 0.01f) {
                 s.orbitR = 0f // the maw's pull beats the orbit
                 val pull = magnetPull(s, d) * dt
                 s.x = Geo.wrap(s.x + dx(s.x, p.x, true) / d * pull, w)
@@ -406,7 +439,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             if (s.ttl > 0f && s.age >= s.ttl) {
                 fx += Fx.StarLost(s.x, s.y)
                 stars.removeAt(i)
-            } else if (s.lit && d < PICKUP) {
+            } else if ((s.lit || s.pulled) && d < PICKUP) {
                 stars.removeAt(i)
                 eat(s)
             }
@@ -546,7 +579,15 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
                 e.stun -= dt
                 e.vx = 0f; e.vy = 0f
             } else {
-                e.type.think(this, e, dt)
+                if (dazzle > 0f && !e.type.boss && !e.ballistic) {
+                    // Dazzled: no idea where you are. Mill about slowly until it wears off.
+                    val a = time * 1.3f + e.seed
+                    e.desireX = kotlin.math.cos(a)
+                    e.desireY = kotlin.math.sin(a)
+                    e.pace = 0.4f
+                } else {
+                    e.type.think(this, e, dt)
+                }
                 movement.moveEnemy(this, e, dt)
                 if (dist(e.x, e.y, p.x, p.y) < PLAYER_RADIUS + e.radius) hitPlayer()
             }
@@ -624,8 +665,10 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
             p.shields > 0 && !fatal -> {
                 p.shields--
                 p.shieldRegen = 0f
-                // An arcade shield is one bubble: popped is popped.
-                if (p.shields == 0) arcade?.spend(PowerUp.SHIELD)
+                // Which shield took it? The one on a clock goes first; a shield cell is kept for last.
+                val a = arcade
+                if (a != null && a.active(PowerUp.SHIELD)) a.spend(PowerUp.SHIELD)
+                else if (run.shieldCells > 0) run.shieldCells--
                 p.invuln = 1.6f
                 fx += Fx.ShieldHit(p.x, p.y)
                 shockwave(p.x, p.y, 3.5f, 1.3f)
@@ -654,58 +697,93 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         }
     }
 
-    val dashCooldown: Float get() = DASH_COOLDOWN * loadout.dashCdMul
+    // ----------------------------------------------------------------------------------------
+    // Buttons: Overdrive and the Nova in the campaign, the three pockets everywhere else
+    // ----------------------------------------------------------------------------------------
 
-    private fun dash() {
-        val p = player
-        if (!loadout.dash || p.dashCd > 0f) return
-        val grid = spec.move == MoveKind.GRID
-        val fromX = p.x
-        val fromY = p.y
-        var wrapped = false
-        // Walk the dash in small hops so it stops at walls and edges instead of tunnelling.
-        val hops = if (grid) DASH_CELLS else 14
-        val hop = if (grid) 1f else DASH_TILES / hops
-        for (n in 0 until hops) {
-            var nx = p.x + p.faceX * hop
-            var ny = p.y + p.faceY * hop
-            if (nx < 0f || nx >= w) { if (!playerWrapX) break; nx = Geo.wrap(nx, w); wrapped = true }
-            if (ny < 0f || ny >= h) { if (!playerWrapY) break; ny = Geo.wrap(ny, h); wrapped = true }
-            if (hasWalls && boxHitsWall(nx, ny, PLAYER_RADIUS * 0.85f)) break
-            // A dash goes clean through a sun, but pulls up short of a black hole.
-            val centre = sun
-            if (centre != null && centre.blackHole && hypot(nx - centre.x, ny - centre.y) < centre.radius + 0.4f) break
-            p.x = nx; p.y = ny
-            if (loadout.dashStun) for (e in enemies) if (dist(e.x, e.y, nx, ny) < 1.1f) stun(e, 2f)
-            // Hoover up anything the dash passes through.
-            var i = stars.size - 1
-            while (i >= 0) {
-                val s = stars[i]
-                if (s.lit && dist(s.x, s.y, nx, ny) < PICKUP) { stars.removeAt(i); eat(s) }
-                i--
-            }
-            i = capsules.size - 1
-            while (i >= 0) {
-                val c = capsules[i]
-                if (dist(c.x, c.y, nx, ny) < PICKUP) { capsules.removeAt(i); collect(c) }
-                i--
-            }
+    private fun press(slot: Int) {
+        if (run.mode.arcade) useItem(slot)
+        else when (slot) {
+            0 -> overdriveButton()
+            1 -> nova()
         }
-        p.px = p.x; p.py = p.y; p.tween = 1f
-        p.started = true
-        p.invuln = max(p.invuln, 0.35f)
-        p.dashCd = dashCooldown
-        fx += Fx.Dash(fromX, fromY, p.x, p.y)
-        if (wrapped) onPlayerWrap(fromX, fromY)
+    }
+
+    /** Seconds Overdrive runs for from the button, and seconds from pressing it to being able to again. */
+    val overdriveTime: Float get() = OVERDRIVE_TIME + loadout.overdriveBonus
+    val overdriveCooldown: Float get() = overdriveTime + OVERDRIVE_REST * loadout.overdriveCdMul
+
+    private fun overdriveButton() {
+        val p = player
+        if (!loadout.overdrive || p.boostCd > 0f) return
+        overdrive = overdriveTime
+        p.boostCd = overdriveCooldown
+        fx += Fx.Overdrive(p.x, p.y)
     }
 
     private fun nova() {
         val p = player
         if (!loadout.nova || p.novaCharge < NOVA_COST) return
         p.novaCharge = 0
-        arcade?.spend(PowerUp.NOVA)
         shockwave(p.x, p.y, 7.5f, 3f)
         meteors.clear()
+    }
+
+    /** Uses whatever is in a pocket. One tap, one use, gone. */
+    fun useItem(slot: Int) {
+        val item = run.pockets.getOrNull(slot) ?: return
+        val p = player
+        run.pockets[slot] = null
+        run.itemsUsed++
+        when (item) {
+            Item.OVERDRIVE -> {
+                overdrive = max(overdrive, OVERDRIVE_TIME)
+                fx += Fx.Overdrive(p.x, p.y)
+            }
+            Item.STUN -> {
+                shockwave(p.x, p.y, 7.5f, 3f)
+                meteors.clear()
+            }
+            Item.WIPE -> {
+                var i = enemies.size - 1
+                while (i >= 0) {
+                    val e = enemies[i]
+                    if (e.type.boss) {
+                        stun(e, 4f)
+                    } else {
+                        fx += Fx.EnemyGone(e.x, e.y)
+                        enemies.removeAt(i)
+                    }
+                    i--
+                }
+                meteors.clear()
+                // And a moment's peace before the next one turns up.
+                spawnTimer = max(spawnTimer, spec.spawnInterval)
+                fx += Fx.Nova(p.x, p.y, 16f)
+            }
+            Item.FLARE -> {
+                flares += Flare(p.x, p.y, 60f, FLARE_TIME, FLARE_TIME)
+                dazzle = DAZZLE_TIME
+            }
+            Item.SHIELD -> {
+                p.shields++
+                run.shieldCells++
+            }
+            Item.PULL -> for (s in stars) s.pulled = true
+        }
+        fx += Fx.ItemUsed(p.x, p.y, item)
+    }
+
+    /** Patches of light fade whatever lit them: an eaten star in a Lights Out level, or a flare anywhere. */
+    private fun updateFlares(dt: Float) {
+        var i = flares.size - 1
+        while (i >= 0) {
+            val f = flares[i]
+            f.life -= dt
+            if (spec.move == MoveKind.SCROLL && f.radius < 30f) f.y -= spec.scrollSpeed * dt
+            if (f.life <= 0f) flares.removeAt(i)
+            i--
+        }
     }
 
     // ----------------------------------------------------------------------------------------
@@ -755,7 +833,7 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         // Like the countdown, the clocks only run once you have moved.
         if (!player.started) return
         a.tick(dt) { kind ->
-            if (kind == PowerUp.SHIELD) player.shields = 0
+            if (kind == PowerUp.SHIELD && player.shields > 0) player.shields--
             fx += Fx.PowerLost(kind)
         }
     }
@@ -822,6 +900,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
     private fun capsuleWeight(a: Arcade, k: PowerUp): Float = when {
         !a.wants(k) -> 0f
+        // A supply drop needs somewhere to put its present.
+        k == PowerUp.SUPPLY && run.pockets.none { it == null } -> 0f
         // An echo is no use where you cannot wrap.
         k == PowerUp.ECHO && !openToPlayer -> 0f
         // One that is already running is only a top-up: offer it less.
@@ -833,13 +913,22 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
 
     private fun collect(c: Capsule) {
         val a = arcade ?: return
+        val hadShield = a.active(PowerUp.SHIELD)
         a.grant(c.kind)
+        var gift: Item? = null
         when (c.kind) {
-            PowerUp.SHIELD -> player.shields = 1
-            PowerUp.NOVA -> player.novaCharge = NOVA_COST
+            // A second shield on a clock only winds the first one back up.
+            PowerUp.SHIELD -> if (!hadShield) player.shields++
+            PowerUp.SUPPLY -> {
+                val free = run.pockets.indexOfFirst { it == null }
+                if (free >= 0) {
+                    gift = Item.values()[rng.nextInt(Item.values().size)]
+                    run.pockets[free] = gift
+                }
+            }
             else -> {}
         }
-        fx += Fx.Powered(c.x, c.y, c.kind)
+        fx += Fx.Powered(c.x, c.y, c.kind, gift)
     }
 
     companion object {
@@ -850,9 +939,14 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         const val MAX_COMBO = 9
         const val COMBO_WINDOW = 3.2f
         const val NOVA_COST = 10
-        const val DASH_COOLDOWN = 4f
-        const val DASH_CELLS = 3
-        const val DASH_TILES = 3.6f
+        const val OVERDRIVE_BOOST = 1.3f
+        const val OVERDRIVE_TIME = 6f
+
+        /** Seconds between an Overdrive from the button running out and the button working again. */
+        const val OVERDRIVE_REST = 10f
+        const val FLARE_TIME = 12f
+        const val DAZZLE_TIME = 3.5f
+        const val PULL_SPEED = 22f
         const val ECHO_TIME = 2.4f
         const val ECHO_COOLDOWN = 6f
         const val SHIELD_REGEN_TIME = 25f

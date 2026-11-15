@@ -37,8 +37,14 @@ object Rules {
     private val FLAT = setOf(MoveKind.GRID, MoveKind.GLIDE)
     private val FLOATY = setOf(MoveKind.GLIDE, MoveKind.SCROLL)
 
+    /** What you cannot see coming should come a little less often, and a little slower. */
+    private val DARK: (LevelSpec) -> Unit = {
+        it.enemyMax = max(2, (it.enemyMax * 0.75f).toInt())
+        it.enemySpeed *= 0.92f
+    }
+
     val all: List<RuleInfo> = listOf(
-        RuleInfo("fog", "DARK NEBULA", "You only see what is close. Stars still glimmer.", 2, ALL_MOVES, conflicts = setOf("lightsout")) { FogRule() },
+        RuleInfo("fog", "DARK NEBULA", "You only see what is close. Stars still glimmer.", 2, ALL_MOVES, tune = DARK, conflicts = setOf("lightsout")) { FogRule() },
         RuleInfo("walls", "DEBRIS FIELD", "Wreckage blocks the way - for them too.", 2, FLAT) { WallsRule() },
         RuleInfo("shy", "SHY STARS", "Stars drift away when you get close.", 2, FLAT) { ShyStarsRule() },
         RuleInfo("decay", "FADING LIGHT", "Stars burn out if you dawdle.", 2, FLAT) { DecayRule() },
@@ -67,7 +73,7 @@ object Rules {
                 it.enemyMax = (it.enemyMax * 1.4f).toInt() + 1
             },
         ) { object : Rule() {} },
-        RuleInfo("lightsout", "LIGHTS OUT", "Pitch black. Each star you eat lights up its patch.", 4, ALL_MOVES, conflicts = setOf("fog")) { LightsOutRule() },
+        RuleInfo("lightsout", "LIGHTS OUT", "Pitch black. Each star you eat lights up its patch.", 4, ALL_MOVES, tune = DARK, conflicts = setOf("fog")) { LightsOutRule() },
     )
 
     fun byId(id: String): RuleInfo = all.first { it.id == id }
@@ -219,20 +225,9 @@ class MeteorRule : Rule() {
 /** Darkness, except around you and wherever you last ate. */
 class LightsOutRule : Rule() {
     override fun setup(w: World) {
-        w.fogRadius = 2.6f
+        w.fogRadius = 3.1f
         // A parting look at the field before the lights go.
         w.flares += Flare(w.player.x, w.player.y, 8f, 5f, 5f)
-    }
-
-    override fun update(w: World, dt: Float) {
-        var i = w.flares.size - 1
-        while (i >= 0) {
-            val f = w.flares[i]
-            f.life -= dt
-            if (w.spec.move == MoveKind.SCROLL) f.y -= w.spec.scrollSpeed * dt
-            if (f.life <= 0f) w.flares.removeAt(i)
-            i--
-        }
     }
 
     override fun onStarEaten(w: World, s: Star) {

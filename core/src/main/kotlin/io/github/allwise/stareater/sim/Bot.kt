@@ -36,8 +36,10 @@ class Bot {
 
         var nearest = Float.MAX_VALUE
         for (e in w.enemies) if (e.active) nearest = minOf(nearest, w.dist(e.x, e.y, p.x, p.y))
-        if (nearest < 2.2f) out.nova = true
-        if (nearest < 1.6f) out.dash = true
+        // Things getting close: reach for whatever the buttons hold.
+        if (nearest < 2.2f) out.slots[1] = true
+        if (nearest < 1.6f) out.slots[0] = true
+        if (nearest < 1.2f) out.slots[2] = true
     }
 
     private fun danger(w: World, x: Float, y: Float): Float {

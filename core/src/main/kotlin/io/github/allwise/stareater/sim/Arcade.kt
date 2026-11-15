@@ -6,7 +6,7 @@ package io.github.allwise.stareater.sim
  *
  *  - Permanent ones last the whole run and stack, up to [max].
  *  - Timed ones run for [seconds] and are topped back up by picking another.
- *  - A charge is held until you spend it.
+ *  - A supply drop is neither: it puts something in an empty pocket.
  */
 enum class PowerUp(val title: String, val blurb: String, val seconds: Float, val max: Int, val weight: Float) {
     SPEED("THRUSTERS", "Permanent. Move 8% faster, up to four times over.", 0f, 4, 1f),
@@ -14,12 +14,12 @@ enum class PowerUp(val title: String, val blurb: String, val seconds: Float, val
     LUCK("LUCKY STARS", "Permanent. Rare stars turn up more often.", 0f, 3, 0.8f),
     SHIELD("SHIELD", "Soaks one hit. Fades after 20 seconds.", 20f, 1, 1.2f),
     MAGNET("MAGNET", "Stars drift towards you for 15 seconds.", 15f, 1, 1.1f),
-    DASH("BLINK DASH", "A dash to use for 25 seconds.", 25f, 1, 0.9f),
+    OVERDRIVE("OVERDRIVE", "30% faster for 8 seconds.", 8f, 1, 0.9f),
     ECHO("WRAP ECHO", "For 20 seconds, wrapping leaves a decoy behind.", 20f, 1, 0.6f),
-    NOVA("NOVA", "One stun blast, kept until you fire it.", 0f, 1, 0.7f);
+    SUPPLY("SUPPLY DROP", "Puts something in an empty pocket.", 0f, 1, 0.7f);
 
     val timed: Boolean get() = seconds > 0f
-    val permanent: Boolean get() = !timed && this != NOVA
+    val permanent: Boolean get() = !timed && this != SUPPLY
 }
 
 /** A power-up lying on the field, waiting to be flown into. */
@@ -39,10 +39,6 @@ class Arcade {
     private val stacks = IntArray(PowerUp.values().size)
     private val timers = FloatArray(PowerUp.values().size)
 
-    /** A nova charge in the tank. */
-    var novaHeld = false
-        private set
-
     fun stacks(p: PowerUp): Int = stacks[p.ordinal]
 
     /** Seconds left on a timed power-up; 0 when it is not running. */
@@ -50,29 +46,28 @@ class Arcade {
 
     fun active(p: PowerUp): Boolean = when {
         p.timed -> timers[p.ordinal] > 0f
-        p == PowerUp.NOVA -> novaHeld
+        p == PowerUp.SUPPLY -> false
         else -> stacks[p.ordinal] > 0
     }
 
     /** False once a power-up has nothing more to give, so the field stops offering it. */
     fun wants(p: PowerUp): Boolean = when {
-        p.timed -> true
-        p == PowerUp.NOVA -> !novaHeld
+        p.timed || p == PowerUp.SUPPLY -> true
         else -> stacks[p.ordinal] < p.max
     }
 
     fun grant(p: PowerUp) {
         when {
             p.timed -> timers[p.ordinal] = p.seconds
-            p == PowerUp.NOVA -> novaHeld = true
+            p == PowerUp.SUPPLY -> {}
             else -> stacks[p.ordinal] = minOf(p.max, stacks[p.ordinal] + 1)
         }
         refresh()
     }
 
-    /** Ends a timed power-up early (a shield that took its hit) or spends the nova. */
+    /** Ends a timed power-up early: a shield that took its hit. */
     fun spend(p: PowerUp) {
-        if (p.timed) timers[p.ordinal] = 0f else if (p == PowerUp.NOVA) novaHeld = false
+        if (p.timed) timers[p.ordinal] = 0f
         refresh()
     }
 
@@ -100,8 +95,6 @@ class Arcade {
         l.luck = 0.5f * stacks(PowerUp.LUCK)
         l.shields = if (active(PowerUp.SHIELD)) 1 else 0
         l.magnet = if (active(PowerUp.MAGNET)) 3.4f else 0f
-        l.dash = active(PowerUp.DASH)
         l.echo = active(PowerUp.ECHO)
-        l.nova = novaHeld
     }
 }

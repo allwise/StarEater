@@ -40,7 +40,7 @@ class GridMovement : Movement(MoveKind.GRID) {
 
     override fun updatePlayer(w: World, input: InputState, dt: Float) {
         val p = w.player
-        val interval = 1f / (PLAYER_RATE * w.loadout.speed * (if (w.restless) 0.7f else 1f))
+        val interval = 1f / (PLAYER_RATE * w.playerSpeed * (if (w.restless) 0.7f else 1f))
         p.stepCd -= dt
         p.holdGate -= dt
         for (t in input.taps) if (p.queue.size < 2) p.queue += t
@@ -198,7 +198,7 @@ abstract class ContinuousMovement(
         if (il > 1f) { ix /= il; iy /= il }
         if (il > 0.2f) p.started = true
 
-        val top = maxSpeed * w.loadout.speed
+        val top = maxSpeed * w.playerSpeed
         p.vx += ix * accel * dt
         p.vy += iy * accel * dt
         val keep = exp(-(if (w.restless) 0.1f else drag) * dt)

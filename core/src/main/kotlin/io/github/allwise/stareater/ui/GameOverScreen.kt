@@ -12,6 +12,7 @@ import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.Sparkles
 import io.github.allwise.stareater.gfx.WorldRenderer
 import io.github.allwise.stareater.meta.SeedKey
+import io.github.allwise.stareater.sim.GameMode
 import io.github.allwise.stareater.sim.RunState
 import kotlin.math.exp
 
@@ -23,8 +24,11 @@ import kotlin.math.exp
  */
 class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(game) {
     private val dust = run.dust.toInt()
-    private val arcade = run.arcade != null
-    private val mastered = !arcade && game.profile.mastered
+    private val mode = run.mode
+    private val mastered = !mode.arcade && game.profile.mastered
+
+    /** An arcade or endless run that never touched its pockets. */
+    private val pure = mode.arcade && run.pure
     private val sparkles = Sparkles(game.gfx)
     private var rank = 0
     private var seedRank = 0
@@ -48,31 +52,37 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
 
     override fun show() {
         val p = game.profile
-        rank = p.rankFor(run.score, arcade)
-        seedRank = if (arcade) 0 else p.seedRankFor(run.key, run.score)
-        p.finishRun(dust, run.level)
+        rank = p.rankFor(run.score, mode)
+        seedRank = if (mode.arcade) 0 else p.seedRankFor(run.key, run.score)
+        p.finishRun(dust, if (mode == GameMode.CAMPAIGN) run.level else 0)
         if (run.key.isNotEmpty()) p.lastSeed = run.key
         // A score is worth initials if it makes the open board or the board for its own seed.
         entering = rank > 0 || seedRank > 0
         p.initials.toCharArray().copyInto(name)
         for (i in 0 until 3) wheel[i] = (name[i] - 'A').toFloat()
         // The jingle gets the room to itself, then the quiet tune creeps in underneath.
-        val salute = rank in 1..3 || seedRank == 1
+        val salute = rank in 1..3 || seedRank == 1 || run.won
         game.audio.play(if (salute) Sfx.HIGH_SCORE else Sfx.GAME_OVER)
         game.audio.tune(Tune.AFTER, after = if (salute) 2.7f else 1.5f, fadeIn = 2.5f)
 
         val y = 34f
         val w = 196f
         val x0 = Gfx.W / 2f - (w * 4 + 12f * 3) / 2f
-        button(x0, y, w, 44f, "NEW RUN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade, p.startLevel))) }
+        button(x0, y, w, 44f, "NEW RUN") { again(SeedKey.random(), p.startLevel) }
         // The same run again, from wherever this one began.
-        button(x0 + (w + 12f), y, w, 44f, "SAME SEED") { game.go(IntroScreen(game, SeedKey.newRun(run.key, arcade, run.startLevel))) }.enabled = SeedKey.isValid(run.key)
+        button(x0 + (w + 12f), y, w, 44f, "SAME SEED") { again(run.key, run.startLevel) }.enabled = SeedKey.isValid(run.key)
         button(x0 + (w + 12f) * 2, y, w, 44f, "SKILL TREE") { game.go(SkillScreen(game)) }
         button(x0 + (w + 12f) * 3, y, w, 44f, "MENU") { game.go(MenuScreen(game)) }
         button(Gfx.W / 2f + 150f, SLOT_Y + 4f, 110f, 44f, "OK") { confirm() }.accent = Pal.GOLD
         // Hold a slot to keep this run's seed, to come back to it later.
         slots = SavedSlots(this, game, 73f, 150f, wide = true, current = { run.key.takeIf { SeedKey.isValid(it) } })
         refresh()
+    }
+
+    /** Another go in the same mode: straight in for the campaign, by way of the pockets for the others. */
+    private fun again(key: String, level: Int) {
+        val next = SeedKey.newRun(key, mode, level)
+        game.go(if (mode.arcade) PocketShop(game, next, pitStop = false) else IntroScreen(game, next))
     }
 
     private fun refresh() {
@@ -83,7 +93,7 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
 
     private fun confirm() {
         if (!entering) return
-        game.profile.addScore(String(name), run.score, run.level, mastered, System.currentTimeMillis(), run.key, arcade)
+        game.profile.addScore(String(name), run.score, run.level, mastered, System.currentTimeMillis(), run.key, mode, pure)
         entering = false
         dragPointer = -1
         refresh()
@@ -138,20 +148,22 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
     override fun render(dt: Float) {
         age += dt
         if (entering) coast(dt)
-        val party = rank > 0 || seedRank == 1
+        val party = rank > 0 || seedRank == 1 || run.won
         g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG)
         val cx = Gfx.W / 2f
         g.glow(cx, 470f, 360f, if (party) Pal.GOLD else Pal.RED, 0.14f)
         if (party) sparkles.celebrate(dt)
         sparkles.draw(dt)
-        g.text(g.huge, "GAME OVER", cx, 518f, if (party) rainbow(age * 0.6f) else Pal.RED, 1f, Align.center)
+        g.text(g.huge, if (run.won) "CAMPAIGN COMPLETE" else "GAME OVER", cx, 518f, if (party) rainbow(age * 0.6f) else Pal.RED, 1f, Align.center)
+        if (run.won) g.text(g.small, "ALL THREE BOSSES DOWN. THE MACHINE IS YOURS: THE ARCADES AND ENDLESS ARE OPEN.", cx, 452f, Pal.GOLD, 1f, Align.center)
+        else if (mode.arcade) g.text(g.small, if (pure) "${mode.title}  -  A PURE RUN: NOTHING USED FROM THE POCKETS" else mode.title, cx, 452f, if (pure) Pal.SHIELD else Pal.DIM, 1f, Align.center)
 
         // The score counts up, because of course it does.
         val shown = (run.score * (age / 0.8f).coerceAtMost(1f)).toInt()
         g.text(g.big, shown.toString(), cx, 418f, Pal.TEXT, 1f, Align.center)
         g.text(g.tiny, "SCORE", cx, 382f, Pal.DIM, 1f, Align.center)
 
-        stat(cx - 300f, "LEVEL", run.level.toString())
+        stat(cx - 300f, if (mode == GameMode.ENDLESS) "WAVE" else "LEVEL", run.level.toString())
         stat(cx - 150f, "STARS", run.starsEaten.toString())
         stat(cx, "BEST COMBO", "x${run.bestCombo}")
         stat(cx + 150f, "STARDUST", "+$dust", Pal.STAR)
@@ -161,7 +173,7 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
         when {
             rank > 0 -> {
                 val extra = (if (mastered) "  -  MASTERED" else "") + (if (seedRank > 0) "  -  #$seedRank ON THIS SEED" else "")
-                g.text(g.body, "${if (arcade) "ARCADE HIGH SCORE!" else "HIGH SCORE!"}  RANK #$rank$extra", cx, 276f, rainbow(age * 0.9f), pulse, Align.center)
+                g.text(g.body, "HIGH SCORE!  RANK #$rank$extra", cx, 276f, rainbow(age * 0.9f), pulse, Align.center)
             }
             seedRank > 0 -> g.text(g.body, "#$seedRank ON SEED ${SeedKey.pretty(run.key)}", cx, 276f, Pal.CYAN, pulse, Align.center)
             else -> g.text(g.small, "${game.profile.stardust} stardust banked. Go spend it.", cx, 270f, Pal.DIM, 1f, Align.center)

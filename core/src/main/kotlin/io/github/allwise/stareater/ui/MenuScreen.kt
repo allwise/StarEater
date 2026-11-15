@@ -13,6 +13,7 @@ import io.github.allwise.stareater.gfx.WorldRenderer
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Bot
+import io.github.allwise.stareater.sim.GameMode
 import io.github.allwise.stareater.sim.InputState
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.RunState
@@ -42,31 +43,41 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
 
     override fun show() {
         game.audio.tune(Tune.MENU)
-        val w = 280f
-        val x = Gfx.W / 2f - w / 2f
-        var y = 322f
-        fun add(label: String, action: () -> Unit): Button {
-            val b = button(x, y, w, 37f, label, action)
-            y -= 43f
-            return b
-        }
-        val play = add("PLAY") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = game.profile.startLevel))) }
-        add("ARCADE") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), arcade = true, level = game.profile.startLevel))) }.accent = Pal.GOLD
-        // Beating a boss opens a start on the level after it. Until then there is nothing to choose.
-        from = button(play.x + play.w + 10f, play.y, 150f, play.h, "") {
-            val p = game.profile
+        // Two columns: the ways to play on the left, everything else on the right.
+        val w = 275f
+        val left = Gfx.W / 2f - w - 10f
+        val right = Gfx.W / 2f + 10f
+        val p = game.profile
+        fun row(i: Int): Float = 322f - i * 43f
+
+        // The campaign shares its row with a start-level picker, once a boss has been beaten.
+        val wide = p.checkpoint == 0 || p.startLevels().size < 2
+        button(left, row(0), if (wide) w else w - 98f, 37f, "CAMPAIGN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = p.startLevel))) }
+        from = button(left + w - 90f, row(0), 90f, 37f, "") {
             val levels = p.startLevels()
             p.startLevel = levels[(levels.indexOf(p.startLevel) + 1) % levels.size]
             p.save()
         }
         from.small = true
-        from.visible = game.profile.checkpoint > 0
-        add("SEEDED RUN") { game.go(SeedScreen(game)) }
-        add("SKILL TREE") { game.go(SkillScreen(game)) }
-        add("HIGH SCORES") { game.go(ScoresScreen(game)) }
-        add("HOW TO PLAY") { game.go(HelpScreen(game)) }
-        if (Gdx.app.type == Application.ApplicationType.Desktop) add("QUIT") { Gdx.app.exit() }
-        button(Gfx.W - 150f, 14f, 134f, 34f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game)) }) }.small = true
+        from.visible = !wide
+
+        // The other three modes open one boss at a time.
+        for ((i, mode) in listOf(GameMode.MATRIX, GameMode.FLOW, GameMode.ENDLESS).withIndex()) {
+            val open = p.unlocked(mode)
+            val b = button(left, row(i + 1), w, 37f, if (open) mode.title else "LOCKED - BEAT BOSS ${mode.ordinal}") {
+                game.go(PocketShop(game, SeedKey.newRun(SeedKey.random(), mode), pitStop = false))
+            }
+            b.enabled = open
+            b.small = !open
+            b.accent = Pal.GOLD
+        }
+        button(left, row(4), w, 37f, "SEEDED RUN") { game.go(SeedScreen(game)) }
+
+        button(right, row(0), w, 37f, "SKILL TREE") { game.go(SkillScreen(game)) }
+        button(right, row(1), w, 37f, "HIGH SCORES") { game.go(ScoresScreen(game)) }
+        button(right, row(2), w, 37f, "HOW TO PLAY") { game.go(HelpScreen(game)) }
+        button(right, row(3), w, 37f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game)) }) }
+        if (Gdx.app.type == Application.ApplicationType.Desktop) button(right, row(4), w, 37f, "QUIT") { Gdx.app.exit() }
     }
 
     override fun back() {
@@ -91,7 +102,7 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         g.star(cx - 300f, 460f + bob, 20f, 8f, 5, 90f + age * 30f, Pal.GOLD)
         g.star(cx + 300f, 460f + bob, 20f, 8f, 5, 90f - age * 30f, Pal.GOLD)
 
-        from.label = "FROM LEVEL ${game.profile.startLevel}"
+        from.label = "FROM ${game.profile.startLevel}"
         drawButtons()
 
         val p = game.profile
@@ -99,6 +110,6 @@ class MenuScreen(game: StarEaterGame) : Screen(game) {
         g.text(g.body, "${p.stardust} STARDUST", 42f, 34f, Pal.STAR)
         val skills = "${p.owned.size}/${Skill.values().size} SKILLS"
         g.text(g.small, if (p.mastered) "MASTERED - $skills" else skills, 42f, 58f, if (p.mastered) Pal.GOLD else Pal.DIM)
-        if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 72f, Pal.DIM, 1f, Align.right)
+        if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 40f, Pal.DIM, 1f, Align.right)
     }
 }

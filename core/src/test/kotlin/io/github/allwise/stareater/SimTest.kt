@@ -2,8 +2,11 @@ package io.github.allwise.stareater
 
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
+import io.github.allwise.stareater.sim.Capsule
 import io.github.allwise.stareater.sim.Bot
 import io.github.allwise.stareater.sim.Eater
+import io.github.allwise.stareater.sim.GameMode
+import io.github.allwise.stareater.sim.Item
 import io.github.allwise.stareater.sim.Enemies
 import io.github.allwise.stareater.sim.Geo
 import io.github.allwise.stareater.sim.Gravity
@@ -174,9 +177,19 @@ class SimTest {
         // Arcade runs: the same levels, but with power-ups turning up and running out.
         for (move in MoveKind.values()) for (level in listOf(2, 9, 23)) {
             val compatible = Rules.all.filter { move in it.moves }.map { it.id }
-            val run = RunState(level.toLong()).also { it.arcade = Arcade() }
+            val run = arcadeRun(level.toLong())
+            // Pockets full of whatever, so the bot's button-mashing sets every item off sooner or later.
+            for (i in 0 until Item.POCKETS) run.pockets[i] = Item.values()[(level + i * 2 + move.ordinal) % Item.values().size]
             val spec = LevelGen.build(level, move, compatible.shuffled(Random(level)).take(2), Enemies.roster)
             soak(World(spec, run.arcade!!.loadout, run, level.toLong()), "arcade $move L$level")
+            worlds++
+        }
+        // Endless: one level, wave after wave.
+        for (seed in 1L..6L) {
+            val run = arcadeRun(seed, GameMode.ENDLESS)
+            val w = World(LevelGen.forRun(run), run.arcade!!.loadout, run, seed)
+            soak(w, "endless seed $seed")
+            assertEquals(run.level, w.spec.number, "the level's numbers must follow the wave")
             worlds++
         }
         for (boss in Enemies.bosses) for (move in listOf(MoveKind.GRID, MoveKind.GLIDE)) for (level in listOf(10, 30)) {
@@ -409,8 +422,13 @@ class SimTest {
         assertTrue(w.enemies.none { it.type.boss })
     }
 
+    private fun arcadeRun(seed: Long = 1L, mode: GameMode = GameMode.FLOW) = RunState(seed).also {
+        it.mode = mode
+        it.arcade = Arcade()
+    }
+
     private fun arcadeWorld(spec: LevelSpec, seed: Long = 1L): World {
-        val run = RunState(seed).also { it.arcade = Arcade() }
+        val run = arcadeRun(seed)
         return World(spec, run.arcade!!.loadout, run, seed)
     }
 
@@ -471,18 +489,243 @@ class SimTest {
     @Test
     fun anArcadeShieldSoaksOneHitAndCarriesIntoTheNextLevel() {
         val spec = LevelGen.build(3, MoveKind.GRID, emptyList(), listOf(Eater))
-        val run = RunState(1L).also { it.arcade = Arcade() }
+        val run = arcadeRun()
         run.arcade!!.grant(PowerUp.SHIELD)
-        run.arcade!!.grant(PowerUp.NOVA)
         val w = World(spec, run.arcade!!.loadout, run, 1L)
         assertEquals(1, w.player.shields, "a shield still running should come along to the next level")
-        assertEquals(World.NOVA_COST, w.player.novaCharge, "so should a held nova")
         w.hitPlayer()
         assertEquals(World.Phase.PLAYING, w.phase)
         assertTrue(!run.arcade!!.active(PowerUp.SHIELD), "a popped shield is gone, whatever its clock said")
         w.player.invuln = 0f
         w.hitPlayer()
         assertEquals(World.Phase.DEAD, w.phase)
+    }
+
+    private fun pocketWorld(vararg items: Item, spec: LevelSpec = LevelGen.build(6, MoveKind.GLIDE, emptyList(), listOf(Eater))): World {
+        val run = arcadeRun()
+        for ((i, item) in items.withIndex()) run.pockets[i] = item
+        return World(spec, run.arcade!!.loadout, run, 1L).also { it.fx.clear() }
+    }
+
+    private fun press(w: World, slot: Int) {
+        val input = InputState()
+        input.slots[slot] = true
+        w.update(1f / 60f, input)
+    }
+
+    @Test
+    fun aPocketItemIsUsedOnceAndThenItIsGone() {
+        val w = pocketWorld(Item.STUN, Item.STUN)
+        w.enemies.clear()
+        val near = w.spawnEnemyAt(Eater, w.player.x + 3f, w.player.y, 0f)
+        assertTrue(w.run.pure)
+        press(w, 0)
+        assertTrue(near.stun > 0f, "the stun blast should have frozen it")
+        assertEquals(null, w.run.pockets[0])
+        assertEquals(Item.STUN, w.run.pockets[1], "only the pocket that was pressed empties")
+        assertEquals(1, w.run.itemsUsed)
+        assertTrue(!w.run.pure, "using anything ends a pure run")
+        assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.ItemUsed })
+        // An empty pocket does nothing at all.
+        press(w, 0)
+        assertEquals(1, w.run.itemsUsed)
+        press(w, 2)
+        assertEquals(1, w.run.itemsUsed)
+    }
+
+    @Test
+    fun wipeClearsTheFieldButOnlyStaggersABoss() {
+        val w = pocketWorld(Item.WIPE, spec = LevelGen.bossLevel(10, Random(1), move = MoveKind.GLIDE))
+        val boss = w.boss!!
+        boss.spawnT = 0f
+        boss.place(2f, 2f)
+        repeat(4) { w.spawnEnemyAt(Eater, 20f + it, 10f, 0f) }
+        press(w, 0)
+        assertEquals(listOf(boss), w.enemies.toList(), "everything but the boss should be gone")
+        assertTrue(boss.slow > 0f)
+        assertEquals(World.Phase.PLAYING, w.phase)
+    }
+
+    @Test
+    fun overdriveIsFasterForAWhileFromAPocketOrFromTheButton() {
+        val w = pocketWorld(Item.OVERDRIVE)
+        w.enemies.clear()
+        assertEquals(1f, w.playerSpeed, 0.001f)
+        press(w, 0)
+        assertEquals(World.OVERDRIVE_BOOST, w.playerSpeed, 0.001f)
+        repeat((World.OVERDRIVE_TIME * 60).toInt() + 5) { w.enemies.clear(); w.stars.clear(); w.update(1f / 60f, InputState()) }
+        assertEquals(1f, w.playerSpeed, 0.001f, "and then it wears off")
+
+        // In the campaign it is a skill on the first button, with a rest after each use.
+        val c = world(LevelGen.build(3, MoveKind.GLIDE, emptyList(), listOf(Eater)), Loadout(overdrive = true))
+        c.enemies.clear()
+        press(c, 0)
+        assertTrue(c.boosting)
+        assertTrue(c.player.boostCd > World.OVERDRIVE_TIME, "the button should not work again until after a rest")
+        repeat((World.OVERDRIVE_TIME * 60).toInt() + 5) { c.enemies.clear(); c.stars.clear(); c.update(1f / 60f, InputState()) }
+        assertTrue(!c.boosting)
+        press(c, 0)
+        assertTrue(!c.boosting, "still resting")
+        // And without the skill the button does nothing.
+        val bare = world(LevelGen.build(3, MoveKind.GLIDE, emptyList(), listOf(Eater)))
+        press(bare, 0)
+        assertTrue(!bare.boosting)
+    }
+
+    @Test
+    fun aShieldCellWaitsUntilItIsNeeded() {
+        val w = pocketWorld(Item.SHIELD)
+        w.enemies.clear()
+        press(w, 0)
+        assertEquals(1, w.player.shields)
+        // It is not on a clock: a long wait and a new level later it is still there.
+        repeat(60 * 40) { w.enemies.clear(); w.stars.clear(); w.update(1f / 60f, InputState()) }
+        assertEquals(1, w.player.shields)
+        val next = World(LevelGen.build(7, MoveKind.GLIDE, emptyList(), listOf(Eater)), w.run.arcade!!.loadout, w.run, 2L)
+        assertEquals(1, next.player.shields, "a shield cell should come along to the next level")
+        next.hitPlayer()
+        assertEquals(World.Phase.PLAYING, next.phase)
+        assertEquals(0, next.run.shieldCells)
+        next.player.invuln = 0f
+        next.hitPlayer()
+        assertEquals(World.Phase.DEAD, next.phase)
+    }
+
+    @Test
+    fun starPullBringsEveryStarIn() {
+        val w = pocketWorld(Item.PULL, spec = LevelGen.build(12, MoveKind.GLIDE, emptyList(), listOf(Eater)))
+        w.enemies.clear()
+        val before = w.stars.size
+        assertTrue(before >= 3)
+        for (s in w.stars) s.ttl = 0f
+        press(w, 0)
+        var frames = 0
+        while (w.collected < before && frames++ < 60 * 4) { w.enemies.clear(); w.update(1f / 60f, InputState()) }
+        assertTrue(w.collected >= before, "only ${w.collected} of $before stars arrived within four seconds")
+    }
+
+    @Test
+    fun aFlareLightsTheDarkAndDazzles() {
+        val w = pocketWorld(Item.FLARE, spec = LevelGen.build(6, MoveKind.GLIDE, listOf("lightsout"), listOf(Eater)))
+        w.enemies.clear()
+        val eater = w.spawnEnemyAt(Eater, w.player.x + 6f, w.player.y, 0f)
+        val flaresBefore = w.flares.size
+        press(w, 0)
+        assertEquals(flaresBefore + 1, w.flares.size)
+        assertTrue(w.flares.last().radius > 30f, "a flare should light the whole field")
+        assertTrue(w.dazzle > 0f)
+        // Dazzled, it is not coming for you: over a second it must not close in the way it would.
+        val gap = w.dist(eater.x, eater.y, w.player.x, w.player.y)
+        repeat(60) { w.update(1f / 60f, InputState()) }
+        assertTrue(w.dist(eater.x, eater.y, w.player.x, w.player.y) > gap - 1.5f, "a dazzled eater still homed in")
+        // The flare burns out by itself, in any kind of level.
+        repeat((World.FLARE_TIME * 60).toInt() + 10) { w.enemies.clear(); w.stars.clear(); w.update(1f / 60f, InputState()) }
+        assertEquals(0, w.flares.size)
+        assertEquals(0f, w.dazzle)
+    }
+
+    @Test
+    fun aSupplyDropFillsAnEmptyPocket() {
+        val w = pocketWorld(Item.STUN)
+        w.enemies.clear()
+        val drop = Capsule(PowerUp.SUPPLY)
+        drop.place(w.player.x, w.player.y)
+        w.capsules += drop
+        w.update(1f / 60f, InputState())
+        assertEquals(Item.STUN, w.run.pockets[0], "what was there stays")
+        assertTrue(w.run.pockets[1] != null, "the drop should have put something in the next free pocket")
+        assertTrue(w.run.pure, "being given something is not the same as using it")
+    }
+
+    @Test
+    fun pitStopPricesClimbWithEveryPurchase() {
+        for (item in Item.values()) {
+            assertEquals(item.price, Item.priceOf(item, 0))
+            assertTrue(Item.priceOf(item, 1) > item.price)
+            assertTrue(Item.priceOf(item, 4) >= item.price * 2 - 1, "four purchases in, things should cost about double")
+        }
+    }
+
+    @Test
+    fun matrixIsAllGridAndFlowHasNone() {
+        val flowMoves = HashSet<MoveKind>()
+        for (seed in 0 until 60L) for (n in 1..32) {
+            val matrix = LevelGen.forSeed(seed, n, GameMode.MATRIX)
+            assertEquals(MoveKind.GRID, matrix.move, "matrix seed $seed level $n")
+            for (m in matrix.modifiers) assertTrue(MoveKind.GRID in Rules.byId(m).moves)
+            val flow = LevelGen.forSeed(seed, n, GameMode.FLOW)
+            assertTrue(flow.move != MoveKind.GRID, "flow seed $seed level $n dealt the grid")
+            flowMoves += flow.move
+            assertEquals(n % LevelSpec.BOSS_EVERY == 0, matrix.boss != null)
+            assertEquals(n % LevelSpec.BOSS_EVERY == 0, flow.boss != null)
+        }
+        assertEquals(setOf(MoveKind.GLIDE, MoveKind.SCROLL, MoveKind.ORBIT), flowMoves)
+    }
+
+    @Test
+    fun endlessIsOneLevelThatKeepsGettingHarder() {
+        val run = arcadeRun(42L, GameMode.ENDLESS)
+        val spec = LevelGen.forRun(run)
+        assertEquals(null, spec.boss)
+        assertEquals(2, spec.modifiers.size)
+        assertEquals(3, spec.roster.size)
+        val again = LevelGen.forSeed(42L, 1, GameMode.ENDLESS)
+        assertEquals("${spec.move} ${spec.modifiers}", "${again.move} ${again.modifiers}", "the same seed must deal the same arena")
+
+        val w = World(spec, run.arcade!!.loadout, run, 42L)
+        val speed = spec.enemySpeed
+        val input = InputState()
+        var waves = 0
+        var guard = 0
+        while (run.level < 4 && guard++ < 200_000) {
+            w.enemies.clear()
+            w.meteors.clear()
+            w.wells.clear()
+            w.sun = null
+            w.tail.clear()
+            if (w.timeLeft >= 0f) w.timeLeft = 15f
+            w.player.invuln = 1f
+            // Park on a star, wherever one is: this is about the bookkeeping, not the dodging.
+            w.stars.firstOrNull { it.lit }?.let { w.player.place(it.x, it.y) }
+            w.update(1f / 60f, input)
+            waves += w.fx.count { it is io.github.allwise.stareater.sim.Fx.Wave }
+            w.fx.clear()
+        }
+        assertEquals(4, run.level, "eating should have carried the run up three waves")
+        assertEquals(3, waves)
+        assertEquals(World.Phase.PLAYING, w.phase, "endless never clears")
+        assertEquals(4, w.spec.number)
+        assertTrue(w.spec.enemySpeed > speed, "and each wave should be harder than the last")
+        assertTrue(run.score > 0 && run.dust > 0f)
+    }
+
+    /** The complaint was a wall at levels 12 to 16. Past the first boss the numbers should only creep. */
+    @Test
+    fun theBackOfTheCampaignIsAClimbNotAWall() {
+        fun at(n: Int) = LevelGen.build(n, MoveKind.GRID, emptyList(), listOf(Eater))
+        assertTrue(at(16).enemyMax <= 9, "level 16 used to field 13 enemies; now ${at(16).enemyMax}")
+        assertTrue(at(16).spawnInterval >= 6f)
+        assertTrue(at(16).enemySpeed < 5f)
+        assertTrue(at(16).quota <= 32)
+        // Still a climb all the way to the end, though.
+        for (n in 2..30) {
+            assertTrue(at(n).enemySpeed >= at(n - 1).enemySpeed)
+            assertTrue(at(n).enemyMax >= at(n - 1).enemyMax)
+            assertTrue(at(n).spawnInterval <= at(n - 1).spawnInterval)
+        }
+        assertTrue(at(30).enemySpeed > at(16).enemySpeed && at(30).enemyMax > at(16).enemyMax)
+        // And what you cannot see coming comes less, and slower.
+        val lit = at(14)
+        val dark = LevelGen.build(14, MoveKind.GRID, listOf("lightsout"), listOf(Eater))
+        assertTrue(dark.enemyMax < lit.enemyMax && dark.enemySpeed < lit.enemySpeed)
+        // Scaling a level in place (endless does this every wave) must not stack the rule tweaks up.
+        val deep = LevelGen.build(5, MoveKind.GLIDE, listOf("deep", "swarm"), listOf(Eater))
+        val width = deep.width
+        val start = deep.enemyStart
+        LevelGen.scale(deep, 5)
+        LevelGen.scale(deep, 5)
+        assertEquals(width, deep.width)
+        assertEquals(start, deep.enemyStart)
     }
 
     @Test

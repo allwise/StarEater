@@ -5,6 +5,7 @@ import io.github.allwise.stareater.meta.Profile
 import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.meta.Skill
+import io.github.allwise.stareater.sim.GameMode
 import kotlin.test.Test
 import kotlin.test.assertEquals
 import kotlin.test.assertFalse
@@ -36,7 +37,7 @@ class MetaTest {
         assertTrue(p.mastered)
         assertEquals(0, p.stardust)
         val l = p.loadout()
-        assertTrue(l.dash && l.dashStun && l.nova && l.echo && l.secondWind && l.shieldRegen)
+        assertTrue(l.overdrive && l.overdriveBonus > 0f && l.overdriveCdMul < 1f && l.nova && l.echo && l.secondWind && l.shieldRegen)
         assertEquals(3.8f, l.magnet)
         assertEquals(1.24f, l.speed, 0.001f)
     }
@@ -58,8 +59,8 @@ class MetaTest {
         assertEquals(7, b.bestLevel)
         assertEquals(1, b.totalRuns)
         assertEquals("ZED", b.initials)
-        assertEquals(listOf("ZED", "KIM", "BOT"), b.topScores(false).map { it.name })
-        assertEquals(listOf("ZED", "BOT"), b.topScores(true).map { it.name })
+        assertEquals(listOf("ZED", "KIM", "BOT"), b.topScores().map { it.name })
+        assertEquals(listOf("ZED", "BOT"), b.topScores(masteredOnly = true).map { it.name })
         assertEquals(2, b.rankFor(2000))
         assertEquals(0, b.rankFor(0))
     }
@@ -109,25 +110,64 @@ class MetaTest {
     }
 
     @Test
-    fun arcadeRunsHaveABoardOfTheirOwn() {
+    fun everyModeHasABoardOfItsOwn() {
         val p = Profile(MemoryStore())
         p.addScore("AAA", 5000, 8, false, 1L, "STAR22")
-        p.addScore("ARC", 9000, 9, false, 2L, "STAR22", arcade = true)
-        p.addScore("BBB", 2000, 4, true, 3L)
-        assertEquals(listOf("AAA", "BBB"), p.topScores(false).map { it.name })
-        assertEquals(listOf("BBB"), p.topScores(true).map { it.name })
-        assertEquals(listOf("AAA"), p.seedScores("STAR22").map { it.name })
-        assertEquals(listOf("ARC"), p.arcadeScores().map { it.name })
-        // An arcade score is ranked against arcade scores only, and the other way round.
+        p.addScore("MAT", 9000, 9, false, 2L, "STAR22", GameMode.MATRIX, pure = true)
+        p.addScore("FLO", 7000, 9, false, 3L, "STAR22", GameMode.FLOW)
+        p.addScore("END", 99000, 31, false, 4L, "", GameMode.ENDLESS)
+        p.addScore("BBB", 2000, 4, true, 5L)
+        assertEquals(listOf("AAA", "BBB"), p.topScores().map { it.name })
+        assertEquals(listOf("BBB"), p.topScores(masteredOnly = true).map { it.name })
+        assertEquals(listOf("AAA"), p.seedScores("STAR22").map { it.name }, "the seed board is the campaign's")
+        assertEquals(listOf("MAT"), p.topScores(GameMode.MATRIX).map { it.name })
+        assertEquals(listOf("FLO"), p.topScores(GameMode.FLOW).map { it.name })
+        assertEquals(listOf("END"), p.topScores(GameMode.ENDLESS).map { it.name })
+        // A score is ranked against its own mode only.
         assertEquals(1, p.rankFor(6000))
-        assertEquals(2, p.rankFor(6000, arcade = true))
-        assertEquals(1, p.rankFor(9500, arcade = true))
+        assertEquals(2, p.rankFor(6000, GameMode.MATRIX))
+        assertEquals(1, p.rankFor(9500, GameMode.MATRIX))
+        assertEquals(99000, p.bestScore(GameMode.ENDLESS))
+        assertEquals(0, Profile(MemoryStore()).bestScore(GameMode.FLOW))
 
         val reloaded = Profile(MemoryStore().also { p.copyInto(it) })
-        assertEquals(listOf("ARC"), reloaded.arcadeScores().map { it.name })
-        assertEquals(listOf("AAA", "BBB"), reloaded.topScores(false).map { it.name })
-        assertTrue(SeedKey.newRun("STAR22", arcade = true).arcade != null)
+        assertEquals(listOf("MAT"), reloaded.topScores(GameMode.MATRIX).map { it.name })
+        assertTrue(reloaded.topScores(GameMode.MATRIX)[0].pure, "the pure mark must survive a reload")
+        assertFalse(reloaded.topScores(GameMode.FLOW)[0].pure)
+        assertEquals(listOf("AAA", "BBB"), reloaded.topScores().map { it.name })
+
+        // Scores from before the arcade was split in two are kept, on the Flow board.
+        val old = MemoryStore().also { it.put("scores", "OLD|4000|6|0|1|STAR22|1\nCAM|3000|5|1|2|STAR22|0") }
+        assertEquals(listOf("OLD"), Profile(old).topScores(GameMode.FLOW).map { it.name })
+        assertEquals(listOf("CAM"), Profile(old).topScores().map { it.name })
+
+        val run = SeedKey.newRun("STAR22", GameMode.MATRIX, level = 11)
+        assertTrue(run.arcade != null)
+        assertEquals(1, run.level, "only the campaign has checkpoints")
         assertTrue(SeedKey.newRun("STAR22").arcade == null)
+    }
+
+    @Test
+    fun theModesOpenOneBossAtATime() {
+        val p = Profile(MemoryStore())
+        assertTrue(p.unlocked(GameMode.CAMPAIGN))
+        assertFalse(p.unlocked(GameMode.MATRIX) || p.unlocked(GameMode.FLOW) || p.unlocked(GameMode.ENDLESS))
+        p.beatBoss(10)
+        assertTrue(p.unlocked(GameMode.MATRIX) && !p.unlocked(GameMode.FLOW))
+        p.beatBoss(20)
+        assertTrue(p.unlocked(GameMode.FLOW) && !p.unlocked(GameMode.ENDLESS))
+        p.beatBoss(30)
+        assertTrue(p.unlocked(GameMode.ENDLESS))
+        assertEquals(listOf(1, 11, 21), p.startLevels(), "there is no starting after the last boss: that is the end")
+
+        // A save from before bosses were recorded still gets what it earned: level 14 means boss 1 fell.
+        val old = MemoryStore().also { it.put("bestLevel", "14") }
+        assertTrue(Profile(old).unlocked(GameMode.MATRIX) && !Profile(old).unlocked(GameMode.FLOW))
+
+        p.grantDust(100)
+        assertFalse(p.spend(101))
+        assertTrue(p.spend(40))
+        assertEquals(60, p.stardust)
     }
 
     @Test

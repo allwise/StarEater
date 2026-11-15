@@ -38,7 +38,8 @@ class Player : Body() {
     var shields = 0
     var shieldRegen = 0f
     var invuln = 0f
-    var dashCd = 0f
+    /** Seconds until the Overdrive button works again. */
+    var boostCd = 0f
     var novaCharge = 0
     var echoCd = 0f
 
@@ -109,6 +110,9 @@ enum class StarType(val value: Int, val title: String) {
 class Star(val type: StarType) : Body() {
     var age = 0f
 
+    /** Set by a Star Pull: the star drops what it was doing and flies to the player. */
+    var pulled = false
+
     /** Seconds until the star fizzles out, or 0 for "stays put". */
     var ttl = 0f
 
@@ -176,7 +180,7 @@ sealed class Fx {
     class ShieldHit(val x: Float, val y: Float) : Fx()
     class Revive(val x: Float, val y: Float) : Fx()
     class Death(val x: Float, val y: Float) : Fx()
-    class Dash(val x0: Float, val y0: Float, val x1: Float, val y1: Float) : Fx()
+    class Overdrive(val x: Float, val y: Float) : Fx()
     class Nova(val x: Float, val y: Float, val radius: Float) : Fx()
     class Wrap(val x0: Float, val y0: Float, val x1: Float, val y1: Float) : Fx()
     class EnemySpawn(val x: Float, val y: Float) : Fx()
@@ -189,8 +193,14 @@ sealed class Fx {
     class TimeUp : Fx()
     class Cleared : Fx()
 
-    /** Arcade mode: a power-up was collected, or one just ran out. */
-    class Powered(val x: Float, val y: Float, val kind: PowerUp) : Fx()
+    /** Arcade mode: a power-up was collected (a supply drop says what it put in a pocket), or one just ran out. */
+    class Powered(val x: Float, val y: Float, val kind: PowerUp, val item: Item? = null) : Fx()
+
+    /** Something was used out of a pocket. */
+    class ItemUsed(val x: Float, val y: Float, val item: Item) : Fx()
+
+    /** Endless mode: the level just got harder. */
+    class Wave(val number: Int) : Fx()
     class PowerLost(val kind: PowerUp) : Fx()
 
     /** The edge block: warning given, edges shut, edges open again. */
@@ -205,9 +215,12 @@ class Loadout(
     var shields: Int = 0,
     var shieldRegen: Boolean = false,
     var secondWind: Boolean = false,
-    var dash: Boolean = false,
-    var dashCdMul: Float = 1f,
-    var dashStun: Boolean = false,
+    /** The Overdrive button: a burst of speed, then a wait. */
+    var overdrive: Boolean = false,
+    var overdriveCdMul: Float = 1f,
+
+    /** Extra seconds of Overdrive. */
+    var overdriveBonus: Float = 0f,
     var echo: Boolean = false,
     var magnet: Float = 0f,
     var comboTime: Float = 1f,
@@ -230,6 +243,23 @@ class RunState(val seed: Long, val key: String = "") {
     var prevMove: MoveKind? = null
     var time = 0f
 
-    /** Set on arcade runs: no skill tree, the kit is whatever got picked up. */
+    /** Set on arcade and endless runs: no skill tree, the kit is whatever got picked up. */
     var arcade: Arcade? = null
+    var mode = GameMode.CAMPAIGN
+
+    /** What is in the pockets: bought before the run or at a pit stop, used once each. */
+    val pockets = arrayOfNulls<Item>(Item.POCKETS)
+
+    /** How many things have been bought at pit stops on this run; each one puts the prices up. */
+    var bought = 0
+
+    /** Shield cells switched on and not yet used up. */
+    var shieldCells = 0
+
+    /** How many pocket items have been used. A run that never touched one is a pure run. */
+    var itemsUsed = 0
+    val pure: Boolean get() = itemsUsed == 0
+
+    /** Set when the campaign's last boss goes down: the run ended in a win, not a death. */
+    var won = false
 }

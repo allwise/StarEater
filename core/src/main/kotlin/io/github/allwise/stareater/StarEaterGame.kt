@@ -17,6 +17,8 @@ import io.github.allwise.stareater.meta.Profile
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Enemies
+import io.github.allwise.stareater.sim.GameMode
+import io.github.allwise.stareater.sim.Item
 import io.github.allwise.stareater.sim.LevelGen
 import io.github.allwise.stareater.sim.MoveKind
 import io.github.allwise.stareater.sim.PowerUp
@@ -27,6 +29,7 @@ import io.github.allwise.stareater.ui.IntroScreen
 import io.github.allwise.stareater.ui.MenuScreen
 import io.github.allwise.stareater.ui.OptionsScreen
 import io.github.allwise.stareater.ui.PlayScreen
+import io.github.allwise.stareater.ui.PocketShop
 import io.github.allwise.stareater.ui.ScoresScreen
 import io.github.allwise.stareater.ui.Screen
 import io.github.allwise.stareater.ui.SeedScreen
@@ -54,7 +57,14 @@ class DevOptions(spec: String) {
     val allSkills: Boolean = map["skills"] == "all"
     val dust: Int = map["dust"]?.toIntOrNull() ?: -1
     val seed: Long = map["seed"]?.toLongOrNull() ?: 1L
-    val arcade: Boolean = map["arcade"] == "1"
+    val mode: GameMode = when (map["mode"]?.lowercase()) {
+        "matrix" -> GameMode.MATRIX
+        "flow" -> GameMode.FLOW
+        "endless" -> GameMode.ENDLESS
+        else -> if (map["arcade"] == "1") GameMode.FLOW else GameMode.CAMPAIGN
+    }
+    val items: List<String> = map["items"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
+    val won: Boolean = map["won"] == "1"
     val powers: List<String> = map["powers"]?.split(',')?.map { it.trim() }?.filter { it.isNotEmpty() } ?: emptyList()
     val align: Int = map["align"]?.toIntOrNull() ?: 0
 
@@ -67,6 +77,15 @@ class DevOptions(spec: String) {
     val out: String = map["out"] ?: "."
 }
 
+/** The few things only the platform can do. On desktop none of them mean anything. */
+interface Platform {
+    /**
+     * Holds the screen the way up it is now, or lets it turn again. Tilt steering leans the phone
+     * about, and a level is no time for the picture to decide to flip over.
+     */
+    fun lockOrientation(locked: Boolean) {}
+}
+
 class PrefsStore : KeyValueStore {
     private val prefs = Gdx.app.getPreferences("stareater")
     override fun get(key: String): String? = if (prefs.contains(key)) prefs.getString(key) else null
@@ -74,7 +93,7 @@ class PrefsStore : KeyValueStore {
     override fun flush() = prefs.flush()
 }
 
-class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(), InputProcessor {
+class StarEaterGame(private val dev: DevOptions? = null, private val platform: Platform = object : Platform {}) : ApplicationAdapter(), InputProcessor {
     lateinit var gfx: Gfx
         private set
     lateinit var profile: Profile
@@ -142,8 +161,10 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
         }
         val run = RunState(d.seed, "DEVRUN")
         run.level = d.level
-        if (d.arcade) {
+        run.mode = d.mode
+        if (d.mode.arcade) {
             run.arcade = Arcade().also { a -> for (p in d.powers) PowerUp.values().firstOrNull { it.name.equals(p, true) }?.let { a.grant(it) } }
+            for ((i, name) in d.items.take(Item.POCKETS).withIndex()) run.pockets[i] = Item.values().firstOrNull { it.name.equals(name, true) }
         }
         val spec = if (d.boss != null) {
             LevelGen.bossLevel(d.level, kotlin.random.Random(d.seed), Enemies.byId(d.boss), d.move)
@@ -156,7 +177,9 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
             "intro" -> go(IntroScreen(this, run, spec))
             "over" -> {
                 val over = RunState(d.seed, "STAR22")
-                if (d.arcade) over.arcade = Arcade()
+                over.mode = d.mode
+                over.won = d.won
+                if (d.mode.arcade) over.arcade = Arcade()
                 over.level = 9; over.score = 12340; over.dust = 87f; over.starsEaten = 64; over.bestCombo = 6
                 profile.addScore("ACE", 30000, 12, true, 1L, "MQQN99")
                 profile.addScore("BOB", 9000, 6, false, 2L, "STAR22")
@@ -171,6 +194,8 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
             }
             "help" -> go(HelpScreen(this))
             "options" -> go(OptionsScreen(this) { go(MenuScreen(this)) })
+            "pack" -> go(PocketShop(this, run.also { it.level = 1 }, pitStop = false))
+            "pitstop" -> go(PocketShop(this, run.also { it.dust = if (d.dust >= 0) d.dust.toFloat() else 180f }, pitStop = true))
             "seed" -> {
                 profile.addScore("KIM", 8200, 7, false, 1L, "STAR22")
                 profile.addScore("ACE", 15100, 11, true, 2L, "STAR22")
@@ -184,6 +209,7 @@ class StarEaterGame(private val dev: DevOptions? = null) : ApplicationAdapter(),
     /** Switches screen. Pass [show] = false to return to a screen that is already set up. */
     fun go(next: Screen, show: Boolean = true) {
         screen = next
+        platform.lockOrientation(next is PlayScreen)
         if (show) next.show() else next.resume()
     }
 

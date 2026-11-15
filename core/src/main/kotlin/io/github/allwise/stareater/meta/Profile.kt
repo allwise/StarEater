@@ -1,5 +1,6 @@
 package io.github.allwise.stareater.meta
 
+import io.github.allwise.stareater.sim.GameMode
 import io.github.allwise.stareater.sim.Loadout
 
 /** The tiny bit of persistence the game needs, so core never touches a platform API directly. */
@@ -19,8 +20,10 @@ class MemoryStore : KeyValueStore {
 class ScoreEntry(
     val name: String, val score: Int, val level: Int, val mastered: Boolean, val epochMs: Long,
     val seed: String = "",
-    /** Arcade runs have their own board: no skill tree, so they are not comparable with the rest. */
-    val arcade: Boolean = false,
+    /** Each mode has a board of its own: the scores are not comparable. */
+    val mode: GameMode = GameMode.CAMPAIGN,
+    /** An arcade or endless run that never used anything out of its pockets. */
+    val pure: Boolean = false,
 )
 
 /** Everything that survives between runs: stardust, skills, settings and the high-score boards. */
@@ -90,6 +93,8 @@ class Profile(private val store: KeyValueStore) {
         tiltSens = store.get(K_TILT_SENS)?.toIntOrNull() ?: 1
         haptics = store.get(K_HAPTICS) != "0"
         checkpoint = (store.get(K_CHECKPOINT)?.toIntOrNull() ?: 0).coerceAtLeast(0)
+        // A save from before bosses were recorded: having reached level 11 means the first boss fell, and so on.
+        checkpoint = maxOf(checkpoint, minOf(GameMode.CAMPAIGN_LENGTH, (bestLevel - 1).coerceAtLeast(0) / CHECKPOINT_EVERY * CHECKPOINT_EVERY))
         startLevel = store.get(K_START)?.toIntOrNull() ?: 1
         store.get(K_SAVED)?.split(',')?.forEachIndexed { i, text ->
             // (An earlier version also wrote a level after a colon; only the key is kept now.)
@@ -107,7 +112,9 @@ class Profile(private val store: KeyValueStore) {
                 val time = f[4].toLongOrNull()
                 val seed = f.getOrNull(5) ?: ""
                 if (score != null && level != null && time != null) {
-                    scores += ScoreEntry(f[0], score, level, f[3] == "1", time, seed, f.getOrNull(6) == "1")
+                    // Field 7 used to be a plain arcade flag ("1"), from before the arcade was split in two.
+                    val mode = when (val m = f.getOrNull(6) ?: "") { "1" -> GameMode.FLOW; "", "0" -> GameMode.CAMPAIGN; else -> GameMode.byId(m) }
+                    scores += ScoreEntry(f[0], score, level, f[3] == "1", time, seed, mode, f.getOrNull(7) == "1")
                 }
             }
         }
@@ -128,7 +135,7 @@ class Profile(private val store: KeyValueStore) {
         return true
     }
 
-    /** Banks the proceeds of a finished run. */
+    /** Banks the proceeds of a finished run. [level] is how far a campaign run got; 0 for the other modes. */
     fun finishRun(dust: Int, level: Int) {
         stardust += dust
         totalRuns++
@@ -136,8 +143,20 @@ class Profile(private val store: KeyValueStore) {
         save()
     }
 
-    /** Every level a run may start on, lowest first. */
-    fun startLevels(): List<Int> = (0..checkpoint / CHECKPOINT_EVERY).map { it * CHECKPOINT_EVERY + 1 }
+    /** Every level a campaign run may start on, lowest first: 1, and the level after each boss beaten short of the last. */
+    fun startLevels(): List<Int> =
+        (0..checkpoint / CHECKPOINT_EVERY).map { it * CHECKPOINT_EVERY + 1 }.filter { it < GameMode.CAMPAIGN_LENGTH }
+
+    /** Matrix opens with the first boss, Flow with the second, Endless with the third. */
+    fun unlocked(mode: GameMode): Boolean = checkpoint >= mode.unlockedBy
+
+    /** Takes stardust out of the bank, if there is enough. */
+    fun spend(amount: Int): Boolean {
+        if (amount > stardust) return false
+        stardust -= amount
+        save()
+        return true
+    }
 
     /** Records a beaten boss. Returns the level that just became a starting point, or 0 if it already was. */
     fun beatBoss(level: Int): Int {
@@ -157,36 +176,36 @@ class Profile(private val store: KeyValueStore) {
         save()
     }
 
-    /** Top scores, best first. With [masteredOnly], only runs played with the full skill tree. */
-    fun topScores(masteredOnly: Boolean, limit: Int = BOARD_SIZE): List<ScoreEntry> =
-        scores.asSequence().filter { !it.arcade && (!masteredOnly || it.mastered) }.take(limit).toList()
+    /** Top scores of one mode, best first. With [masteredOnly], only runs played with the full skill tree. */
+    fun topScores(mode: GameMode = GameMode.CAMPAIGN, masteredOnly: Boolean = false, limit: Int = BOARD_SIZE): List<ScoreEntry> =
+        scores.asSequence().filter { it.mode == mode && (!masteredOnly || it.mastered) }.take(limit).toList()
 
-    /** Top scores set on one particular seed key. */
+    /** Top campaign scores set on one particular seed key. */
     fun seedScores(seed: String, limit: Int = BOARD_SIZE): List<ScoreEntry> =
-        scores.asSequence().filter { !it.arcade && it.seed == seed }.take(limit).toList()
+        scores.asSequence().filter { it.mode == GameMode.CAMPAIGN && it.seed == seed }.take(limit).toList()
 
-    /** Top scores of arcade runs. */
-    fun arcadeScores(limit: Int = BOARD_SIZE): List<ScoreEntry> =
-        scores.asSequence().filter { it.arcade }.take(limit).toList()
-
-    /** 1-based rank a score would get on the open board (or the arcade one), or 0 if it would not make it. */
-    fun rankFor(score: Int, arcade: Boolean = false): Int {
+    /** 1-based rank a score would get on its mode's board, or 0 if it would not make it. */
+    fun rankFor(score: Int, mode: GameMode = GameMode.CAMPAIGN): Int {
         if (score <= 0) return 0
-        val rank = scores.count { it.arcade == arcade && it.score >= score } + 1
+        val rank = scores.count { it.mode == mode && it.score >= score } + 1
         return if (rank <= BOARD_SIZE) rank else 0
     }
 
-    /** 1-based rank a score would get among runs on the same seed, or 0. */
+    /** 1-based rank a campaign score would get among runs on the same seed, or 0. */
     fun seedRankFor(seed: String, score: Int): Int {
         if (score <= 0 || seed.isEmpty()) return 0
-        val rank = scores.count { !it.arcade && it.seed == seed && it.score >= score } + 1
+        val rank = scores.count { it.mode == GameMode.CAMPAIGN && it.seed == seed && it.score >= score } + 1
         return if (rank <= BOARD_SIZE) rank else 0
     }
 
+    /** The best score ever set in a mode, or 0. */
+    fun bestScore(mode: GameMode): Int = scores.firstOrNull { it.mode == mode }?.score ?: 0
+
     fun addScore(
-        name: String, score: Int, level: Int, mastered: Boolean, nowMs: Long, seed: String = "", arcade: Boolean = false,
+        name: String, score: Int, level: Int, mastered: Boolean, nowMs: Long, seed: String = "",
+        mode: GameMode = GameMode.CAMPAIGN, pure: Boolean = false,
     ): ScoreEntry {
-        val entry = ScoreEntry(name, score, level, mastered, nowMs, seed, arcade)
+        val entry = ScoreEntry(name, score, level, mastered, nowMs, seed, mode, pure)
         scores += entry
         sortScores()
         // Keep enough history that the smaller boards are not starved by open-board entries, and
@@ -194,10 +213,11 @@ class Profile(private val store: KeyValueStore) {
         var i = scores.size - 1
         while (scores.size > KEEP && i >= 0) {
             val e = scores[i]
-            val bestOnSeed = !e.arcade && e.seed.isNotEmpty() && scores.first { !it.arcade && it.seed == e.seed } === e
-            // The arcade board is small next to the others: keep it whole.
-            val onArcadeBoard = e.arcade && scores.count { it.arcade && it.score >= e.score } <= BOARD_SIZE
-            if (!bestOnSeed && !onArcadeBoard) scores.removeAt(i)
+            val campaign = e.mode == GameMode.CAMPAIGN
+            val bestOnSeed = campaign && e.seed.isNotEmpty() && scores.first { it.mode == GameMode.CAMPAIGN && it.seed == e.seed } === e
+            // The other modes' boards are small next to the campaign's: keep them whole.
+            val onItsBoard = !campaign && scores.count { it.mode == e.mode && it.score >= e.score } <= BOARD_SIZE
+            if (!bestOnSeed && !onItsBoard) scores.removeAt(i)
             i--
         }
         initials = name
@@ -252,7 +272,7 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_START, startLevel.toString())
         store.put(K_SAVED, saved.joinToString(",") { it ?: "" })
         store.put(K_SKILLS, owned.joinToString(",") { it.name })
-        store.put(K_SCORES, scores.joinToString("\n") { "${it.name}|${it.score}|${it.level}|${if (it.mastered) 1 else 0}|${it.epochMs}|${it.seed}|${if (it.arcade) 1 else 0}" })
+        store.put(K_SCORES, scores.joinToString("\n") { "${it.name}|${it.score}|${it.level}|${if (it.mastered) 1 else 0}|${it.epochMs}|${it.seed}|${it.mode.id}|${if (it.pure) 1 else 0}" })
         store.flush()
     }
 

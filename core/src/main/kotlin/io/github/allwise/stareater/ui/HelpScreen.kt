@@ -40,14 +40,14 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         )
         section(
             "CONTROLS",
-            if (game.keyHints) "Move: arrows or WASD.  Dash: SPACE.  Nova: E.  Pause: ESC.  Music: M.  Or drag with the mouse."
+            if (game.keyHints) "Move: arrows or WASD.  Buttons: SPACE, E, C or 1, 2, 3.  Pause: ESC.  Music: M.  Or drag with the mouse."
             else "Drag anywhere to steer, or turn on tilt steering in the options. In classic levels a quick tap steps " +
-                "once towards your finger. Tap the dials to dash or fire the nova.",
+                "once towards your finger. The round buttons down the edge are yours to tap.",
         )
         section(
             "THE RUN",
-            "Level 1 is the classic. Then a slot machine deals every level up to five rules: a way of moving plus twists " +
-                "like darkness or debris. Every tenth level is a boss. Out-eat it: each star you swallow hurts it.",
+            "Thirty levels. A slot machine deals each one up to five rules: a way of moving plus twists like darkness " +
+                "or debris. Every tenth is a boss: out-eat it. Each boss beaten opens a mode: Matrix, Flow, then Endless.",
         )
         section(
             "SEEDS",
@@ -56,13 +56,12 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         )
         section(
             "THE LONG GAME",
-            "Stardust buys permanent skills. Own the whole tree and your runs land on the MASTERED board: same kit for " +
-                "everybody.",
+            "Stardust buys permanent skills for the campaign. A run with the whole tree earns a gold star on the board.",
         )
         section(
-            "ARCADE",
-            "No skill tree: your kit is what you pick up. Power-ups are the tilted squares. Thrusters, frenzy and luck " +
-                "last the run; shield, magnet, dash and echo run on a clock; a nova is kept until fired.",
+            "ARCADE AND ENDLESS",
+            "No skill tree: your kit is what you pick up, plus three pockets of one-use items bought with stardust and " +
+                "restocked every fifth level. Never use one: a pure run.",
         )
 
         // Bestiary: each one as its letter (classic levels) and as the creature it becomes elsewhere.

@@ -2,6 +2,7 @@ package io.github.allwise.stareater.gfx
 
 import com.badlogic.gdx.graphics.Color
 import com.badlogic.gdx.math.MathUtils
+import io.github.allwise.stareater.sim.Item
 import io.github.allwise.stareater.sim.PowerUp
 
 /**
@@ -70,7 +71,7 @@ class PowerArt(private val g: Gfx) {
                 g.rect(x + s * 0.65f - w * 0.6f, y + s * 0.5f, w * 1.2f, s * 0.35f, Pal.WHITE, a)
             }
             // An arrow with speed lines.
-            PowerUp.DASH -> {
+            PowerUp.OVERDRIVE -> {
                 g.line(x - s * 0.9f, y, x + s * 0.3f, y, w, c, a)
                 g.triangle(x + s, y, x + s * 0.2f, y + s * 0.65f, x + s * 0.2f, y - s * 0.65f, c, a)
                 g.line(x - s * 0.9f, y + s * 0.6f, x - s * 0.3f, y + s * 0.6f, w * 0.6f, c, a * 0.6f)
@@ -81,10 +82,50 @@ class PowerArt(private val g: Gfx) {
                 g.ring(x - s * 0.35f, y, s * 0.5f, w * 0.7f, c, a * 0.45f)
                 g.ring(x + s * 0.35f, y, s * 0.5f, w, c, a)
             }
+            // A crate with a ribbon round it.
+            PowerUp.SUPPLY -> {
+                g.frame(x - s * 0.8f, y - s * 0.7f, s * 1.6f, s * 1.4f, w * 0.8f, c, a)
+                g.rect(x - w * 0.4f, y - s * 0.7f, w * 0.8f, s * 1.4f, c, a)
+                g.rect(x - s * 0.8f, y - w * 0.4f, s * 1.6f, w * 0.8f, c, a)
+            }
+        }
+    }
+
+    /** A pocket item's symbol, about [s] pixels from centre to edge. */
+    fun item(item: Item, x: Float, y: Float, s: Float, time: Float, a: Float) {
+        val c = color(item)
+        val w = (s * 0.3f).coerceAtLeast(1.5f)
+        when (item) {
+            Item.OVERDRIVE -> icon(PowerUp.OVERDRIVE, x, y, s, time, a)
             // A blast.
-            PowerUp.NOVA -> {
+            Item.STUN -> {
                 g.star(x, y, s, s * 0.4f, 8, time * 40f, c, a)
                 g.circle(x, y, s * 0.3f, Pal.WHITE, a)
+            }
+            // A clean sweep: everything crossed out.
+            Item.WIPE -> {
+                g.ring(x, y, s * 0.95f, w * 0.7f, c, a)
+                g.line(x - s * 0.5f, y - s * 0.5f, x + s * 0.5f, y + s * 0.5f, w, c, a)
+                g.line(x - s * 0.5f, y + s * 0.5f, x + s * 0.5f, y - s * 0.5f, w, c, a)
+            }
+            // A little sun.
+            Item.FLARE -> {
+                g.circle(x, y, s * 0.42f, c, a)
+                for (i in 0 until 8) {
+                    val ang = i * 45f + time * 30f
+                    g.line(
+                        x + MathUtils.cosDeg(ang) * s * 0.62f, y + MathUtils.sinDeg(ang) * s * 0.62f,
+                        x + MathUtils.cosDeg(ang) * s, y + MathUtils.sinDeg(ang) * s, w * 0.7f, c, a,
+                    )
+                }
+            }
+            Item.SHIELD -> {
+                g.ring(x, y, s * 0.85f, w, c, a)
+                g.circle(x, y, s * 0.3f, c, a)
+            }
+            Item.PULL -> {
+                icon(PowerUp.MAGNET, x, y + s * 0.15f, s * 0.8f, time, a)
+                g.star(x, y - s * 0.75f, s * 0.35f, s * 0.14f, 5, 90f, Pal.STAR, a)
             }
         }
     }
@@ -96,9 +137,18 @@ class PowerArt(private val g: Gfx) {
             PowerUp.LUCK -> Pal.GOLD
             PowerUp.SHIELD -> Pal.SHIELD
             PowerUp.MAGNET -> Pal.PURPLE
-            PowerUp.DASH -> Pal.CYAN
+            PowerUp.OVERDRIVE -> Pal.CYAN
             PowerUp.ECHO -> Pal.TEXT
-            PowerUp.NOVA -> Pal.ORANGE
+            PowerUp.SUPPLY -> Pal.ORANGE
+        }
+
+        fun color(item: Item): Color = when (item) {
+            Item.OVERDRIVE -> Pal.CYAN
+            Item.STUN -> Pal.GOLD
+            Item.WIPE -> Pal.RED
+            Item.FLARE -> Pal.STAR
+            Item.SHIELD -> Pal.SHIELD
+            Item.PULL -> Pal.PURPLE
         }
     }
 }

@@ -9,6 +9,8 @@ import io.github.allwise.stareater.audio.Audio
 import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.audio.Tune
 import io.github.allwise.stareater.sim.Fx
+import io.github.allwise.stareater.sim.GameMode
+import io.github.allwise.stareater.sim.Item
 import io.github.allwise.stareater.sim.StarType
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
@@ -32,20 +34,25 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     private var lastTick = 0
     private var klaxon = 0f
 
-    /** Set when beating this level's boss opened a new place to start from. */
-    private var unlocked = 0
+    /** What beating this level's boss opened up, to say so on the clear banner. */
+    private var unlocked = ""
     private var frameDt = 0f
 
     override fun show() {
         game.audio.tune(
             when {
                 spec.boss != null -> Tune.BOSS
+                // The arcades and the endless mode each have a tune of their own, whatever the level.
+                run.mode == GameMode.MATRIX -> Tune.MATRIX
+                run.mode == GameMode.FLOW -> Tune.FLOW
+                run.mode == GameMode.ENDLESS -> Tune.ENDLESS
                 spec.move == MoveKind.GRID -> Tune.CLASSIC
                 spec.move == MoveKind.GLIDE -> Tune.GLIDE
                 spec.move == MoveKind.SCROLL -> Tune.SCROLL
                 else -> Tune.ORBIT
             },
         )
+        if (run.mode == GameMode.ENDLESS) game.audio.tempo(tempoFor(run.level))
         // The player beams in: a soft whoop to go with it.
         game.audio.play(Sfx.WRAP, 0.7f, 0.8f)
         button(Gfx.W / 2f - 140f, 268f, 280f, 44f, "RESUME") { paused = false }
@@ -77,9 +84,14 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         if (!paused) {
             controls.playerX = world.player.x * WorldRenderer.T
             controls.playerY = world.player.y * WorldRenderer.T
-            // In arcade mode the dash and the nova come and go with the power-ups.
-            controls.dashEnabled = world.loadout.dash
-            controls.novaEnabled = world.loadout.nova
+            // The three action buttons: the pockets on an arcade or endless run, else Overdrive and
+            // the Nova. They sit on the side away from the joystick pad.
+            val arcade = run.mode.arcade
+            controls.slotOn[0] = if (arcade) run.pockets[0] != null else world.loadout.overdrive
+            controls.slotOn[1] = if (arcade) run.pockets[1] != null else world.loadout.nova
+            controls.slotOn[2] = arcade && run.pockets[2] != null
+            controls.buttonsLeft = game.gfx.align < 0
+            renderer.buttonsLeft = controls.buttonsLeft
             if (tilting) {
                 val i = Gdx.input
                 // libGDX reports the sensor in a phone's axes on every device: on one whose natural way
@@ -102,10 +114,19 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         banner()
 
         when (world.phase) {
-            World.Phase.CLEARED -> if (world.phaseTime > 1.7f) {
-                run.level++
-                run.prevMove = spec.move
-                game.go(IntroScreen(game, run))
+            World.Phase.CLEARED -> if (world.phaseTime > (if (unlocked.isEmpty()) 1.7f else 3f)) {
+                val done = spec.number
+                if (run.mode == GameMode.CAMPAIGN && done >= GameMode.CAMPAIGN_LENGTH) {
+                    // The last boss is down: that is the campaign, and the run ends in a win.
+                    run.won = true
+                    game.go(GameOverScreen(game, run))
+                } else {
+                    run.level++
+                    run.prevMove = spec.move
+                    // Every fifth level of an arcade run there is a pit stop to restock the pockets.
+                    if (run.mode.arcade && done % Item.SHOP_EVERY == 0) game.go(PocketShop(game, run, pitStop = true))
+                    else game.go(IntroScreen(game, run))
+                }
             }
             World.Phase.DEAD -> if (world.phaseTime > 1.6f) game.go(GameOverScreen(game, run))
             else -> {}
@@ -133,7 +154,23 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 audio.play(Sfx.DEATH)
                 audio.tune(null)
             }
-            is Fx.Dash -> audio.play(Sfx.DASH)
+            is Fx.Overdrive -> audio.play(Sfx.DASH, 0.8f)
+            is Fx.ItemUsed -> {
+                when (e.item) {
+                    Item.STUN -> {} // the blast speaks for itself
+                    Item.WIPE -> audio.play(Sfx.BOSS_HIT, 0.6f)
+                    Item.FLARE -> audio.play(Sfx.UNSEAL, 1.2f)
+                    Item.SHIELD -> audio.play(Sfx.POWER_UP, 1.2f, 0.7f)
+                    Item.PULL -> audio.play(Sfx.EAT_RARE, 0.7f)
+                    Item.OVERDRIVE -> {}
+                }
+                game.buzz()
+            }
+            is Fx.Wave -> {
+                audio.play(Sfx.CLEAR, 1.15f, 0.7f)
+                // Each wave the tune runs a little faster.
+                audio.tempo(tempoFor(e.number))
+            }
             is Fx.Nova -> audio.play(Sfx.BLAST, 1.2f, 0.7f)
             is Fx.Wrap -> audio.play(Sfx.WRAP)
             is Fx.EnemySpawn -> audio.play(Sfx.SPAWN)
@@ -144,8 +181,16 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             is Fx.BossHit -> audio.play(Sfx.BOSS_HIT)
             is Fx.BossDead -> {
                 audio.play(Sfx.BOSS_DEAD)
-                // A boss beaten is a checkpoint: from now on a run can begin on the level after it.
-                unlocked = game.profile.beatBoss(spec.number)
+                // A boss beaten for the first time opens something: a mode, and a place to start from.
+                val next = game.profile.beatBoss(spec.number)
+                if (next > 0) {
+                    val mode = GameMode.values().firstOrNull { it.arcade && it.unlockedBy == spec.number }
+                    unlocked = when {
+                        mode != null && next < GameMode.CAMPAIGN_LENGTH -> "${mode.title} UNLOCKED  -  AND THE CAMPAIGN CAN NOW START AT LEVEL $next"
+                        mode != null -> "${mode.title} UNLOCKED"
+                        else -> ""
+                    }
+                }
             }
             is Fx.Cleared -> audio.play(Sfx.CLEAR)
             is Fx.Powered -> {
@@ -234,7 +279,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 g.glow(cx, cy, 300f, Pal.STAR, 0.25f * a)
                 g.text(g.huge, "CLEAR!", cx, cy + 40f, Pal.STAR, a, Align.center)
                 g.text(g.body, "+${world.clearBonus} BONUS", cx, cy - 28f, Pal.TEXT, a, Align.center)
-                if (unlocked > 0) g.text(g.small, "CHECKPOINT  -  NEW RUNS CAN NOW START AT LEVEL $unlocked", cx, cy - 62f, Pal.CYAN, a, Align.center)
+                if (unlocked.isNotEmpty()) g.text(g.small, unlocked, cx, cy - 62f, Pal.CYAN, a, Align.center)
             }
             World.Phase.DEAD -> {
                 val a = ((world.phaseTime - 0.3f) * 3f).coerceIn(0f, 1f)
@@ -280,6 +325,9 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     }
 
     private companion object {
+        /** How much the endless tune is hurried by wave [n]: three per cent a wave, up to a third faster. */
+        fun tempoFor(n: Int): Float = (1f + 0.03f * (n - 1)).coerceAtMost(1.33f)
+
         /** Gentle, normal, twitchy. */
         val TILT_SENSITIVITY = floatArrayOf(0.65f, 1f, 1.6f)
     }

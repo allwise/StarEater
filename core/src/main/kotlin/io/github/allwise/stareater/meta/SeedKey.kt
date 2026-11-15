@@ -1,6 +1,7 @@
 package io.github.allwise.stareater.meta
 
 import io.github.allwise.stareater.sim.Arcade
+import io.github.allwise.stareater.sim.GameMode
 import io.github.allwise.stareater.sim.RunState
 import kotlin.random.Random
 
@@ -39,13 +40,14 @@ object SeedKey {
     fun pretty(key: String): String = if (key.length == LENGTH) key.substring(0, 3) + "-" + key.substring(3) else key
 
     /**
-     * A fresh run on a key, beginning on [level]. An [arcade] run carries its own kit instead of
-     * the skill tree.
+     * A fresh run on a key. Only the campaign can begin anywhere but level 1 (from a checkpoint);
+     * the other modes carry their own kit instead of the skill tree.
      */
-    fun newRun(key: String, arcade: Boolean = false, level: Int = 1): RunState =
+    fun newRun(key: String, mode: GameMode = GameMode.CAMPAIGN, level: Int = 1): RunState =
         RunState(seedOf(key), key).also {
-            if (arcade) it.arcade = Arcade()
-            it.level = level.coerceAtLeast(1)
+            it.mode = mode
+            if (mode.arcade) it.arcade = Arcade()
+            it.level = if (mode == GameMode.CAMPAIGN) level.coerceAtLeast(1) else 1
             it.startLevel = it.level
         }
 

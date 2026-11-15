@@ -119,6 +119,28 @@ class AudioTest {
         assertEquals(0f, player.gain)
     }
 
+    /** Endless mode hurries its tune along: faster means the loop comes round sooner, still without a seam. */
+    @Test
+    fun aHurriedTuneStillLoopsCleanly() {
+        val tune = ShortArray(1000) { (it * 20).toShort() } // a ramp, so any jump would show
+        val player = LoopPlayer()
+        player.start(tune)
+        val block = ShortArray(100)
+        player.fill(block, 1f, 1.25f) // the fade-in block
+        var wraps = 0
+        var last = block[99].toInt()
+        repeat(40) {
+            player.fill(block, 1f, 1.25f)
+            for (v in block) {
+                val now = v.toInt()
+                if (now < last) wraps++ else assertTrue(now - last <= 30, "a jump of ${now - last} inside the ramp")
+                last = now
+            }
+        }
+        // 4000 samples out at 1.25x is 5000 samples of tune: five times round a 1000-sample loop.
+        assertEquals(5, wraps)
+    }
+
     /** What is in the loop has to join up as well: the end of each tune must run on into its start. */
     @Test
     fun everyTuneRunsOnFromItsEndIntoItsStart() {

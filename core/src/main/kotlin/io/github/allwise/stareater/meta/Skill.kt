@@ -25,9 +25,9 @@ enum class Skill(
 
     THRUST_1("THRUSTERS I", "Move 12% faster.", 30, Branch.ENGINE, -1, 0, null, { it.speed += 0.12f }),
     THRUST_2("THRUSTERS II", "Another 12% faster.", 110, Branch.ENGINE, 0, 1, THRUST_1, { it.speed += 0.12f }),
-    DASH("BLINK DASH", "Dash a few tiles ahead, untouchable. Eats stars on the way.", 160, Branch.ENGINE, 1, 1, THRUST_1, { it.dash = true }),
+    DASH("OVERDRIVE", "A button: 30% faster for six seconds, then a breather.", 160, Branch.ENGINE, 1, 1, THRUST_1, { it.overdrive = true }),
     ECHO("WRAP ECHO", "Wrapping leaves an afterimage that enemies chase.", 240, Branch.ENGINE, 0, 2, THRUST_2, { it.echo = true }),
-    PHASE_DASH("PHASE DASH", "Dash recharges faster and stuns what it passes.", 300, Branch.ENGINE, 1, 2, DASH, { it.dashCdMul = 0.6f; it.dashStun = true }),
+    PHASE_DASH("AFTERBURNER", "Overdrive lasts two seconds longer and recharges faster.", 300, Branch.ENGINE, 1, 2, DASH, { it.overdriveCdMul = 0.6f; it.overdriveBonus = 2f }),
 
     MAW_1("GRAVITY MAW I", "Nearby stars drift towards you.", 35, Branch.MAW, -1, 0, null, { it.magnet = 2.2f }),
     MAW_2("GRAVITY MAW II", "A much wider pull.", 120, Branch.MAW, 0, 1, MAW_1, { it.magnet = 3.8f }),
