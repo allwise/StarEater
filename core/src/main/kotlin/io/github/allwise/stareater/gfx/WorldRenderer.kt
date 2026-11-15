@@ -1219,11 +1219,13 @@ class WorldRenderer(private val g: Gfx) {
             if (w.loadout.overdrive) {
                 val on = w.overdrive > 0f
                 val fill = if (on) w.overdrive / w.overdriveTime else 1f - (w.player.boostCd / w.overdriveCooldown).coerceIn(0f, 1f)
-                dial(bx0, BUTTON_Y[0], fill, if (on) "GO!" else "BOOST", if (keyHints) "SPACE" else "", Pal.CYAN)
+                dial(bx0, BUTTON_Y[0], fill, on, if (keyHints) "SPACE" else "", PowerArt.color(Item.OVERDRIVE)) { x, y, s, a ->
+                    powerArt.item(Item.OVERDRIVE, x, y, s, time, a)
+                }
             }
             if (w.loadout.nova) {
                 val charge = w.player.novaCharge.toFloat() / World.NOVA_COST
-                dial(bx0, BUTTON_Y[1], charge, "NOVA", if (keyHints) "E" else "", Pal.GOLD)
+                dial(bx0, BUTTON_Y[1], charge, false, if (keyHints) "E" else "", Pal.GOLD) { x, y, s, a -> powerArt.nova(x, y, s, time, a) }
             }
         }
 
@@ -1295,13 +1297,18 @@ class WorldRenderer(private val g: Gfx) {
         }
     }
 
-    private fun dial(x: Float, y: Float, fill: Float, label: String, hint: String, c: Color) {
+    /**
+     * A campaign action button: a picture in a ring that fills as it charges, the same look as a
+     * pocket. The picture is dim while it charges, bright when it is ready, and throbs while it runs.
+     */
+    private fun dial(x: Float, y: Float, fill: Float, running: Boolean, hint: String, c: Color, picture: (Float, Float, Float, Float) -> Unit) {
         val ready = fill >= 1f
         g.circle(x, y, DIAL_R, Pal.PANEL, 0.55f)
         g.ring(x, y, DIAL_R, 3f, Pal.LINE, 0.8f)
         g.ring(x, y, DIAL_R, 4f, c, if (ready) 0.7f + 0.3f * MathUtils.sin(time * 6f) else 0.5f, 90f, -360f * fill)
-        g.text(g.tiny, label, x, y + 9f, if (ready) c else Pal.DIM, 1f, Align.center)
-        if (hint.isNotEmpty()) g.text(g.tiny, hint, x, y - 5f, Pal.DIM, 0.8f, Align.center)
+        val a = if (running) 0.75f + 0.25f * MathUtils.sin(time * 14f) else if (ready) 1f else 0.4f
+        picture(x, y + 2f, if (running) 14f else 13f, a)
+        if (hint.isNotEmpty()) g.text(g.tiny, hint, x + DIAL_R - 4f, y - DIAL_R + 12f, Pal.DIM, 0.8f, Align.center)
     }
 
     companion object {

@@ -58,12 +58,14 @@ Run the tests:
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
 
-The title screen has two pages. The front one is what there is to play - the campaign, each other
+The title screen has two pages. The front one is what there is to play - START (the campaign), each other
 mode once its boss is beaten (until then a line says which boss opens the next one), and the skill
 tree. MORE holds the rest: seeded runs, high scores, how to play and the options.
 
 The three action buttons run down one edge of the field - top, middle, bottom - on the right, or on
-the left if the picture has been slid left to put the joystick pad on the right.
+the left if the picture has been slid left to put the joystick pad on the right. In the campaign
+they are pictures, like the pockets: Overdrive's arrow (dim while it recharges, a ring filling round
+it) and the Nova burst, which charges as you eat.
 
 ### Options
 

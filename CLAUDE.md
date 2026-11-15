@@ -84,7 +84,8 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
   only), boss 2 Arcade Flow (never the grid), boss 3 Endless.
 - Arcade and Endless have no skill tree: field pick-ups plus three pockets of one-use items. The
   pit stop (every 5th level) spends only what the run has earned, and each purchase raises prices 25%.
-- The title screen's front page is only what can be played now, plus the skill tree: locked modes
+- The title screen's front page is only what can be played now, plus the skill tree. The campaign
+  button just says START (the other modes come later, once you are familiar). Locked modes
   are not listed, one line names the next unlock, and everything else lives behind MORE.
 - The quota drops by 6 after each boss (not in Endless, and not the bosses' own); rules, enemies and
   speed keep climbing regardless. Level length should stay roughly flat across the campaign.
@@ -101,7 +102,8 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 
 **Playtested once (2026-11-15): "a lot of good feel".** Three small things came back and are built
 and pushed, waiting on the next playtest: menus centred on the whole screen instead of following
-the left/right setting; the two-page title screen with locked modes hidden; the quota dropping by
+the left/right setting; the campaign button reading START and its Overdrive/Nova buttons drawn as
+pictures like the pockets (no text to read mid-run); the two-page title screen with locked modes hidden; the quota dropping by
 6 after each boss because levels past 10 to 15 ran long (level 11 is now 20 stars, 19 is 28, 21 is
 24, 29 is 32).
 

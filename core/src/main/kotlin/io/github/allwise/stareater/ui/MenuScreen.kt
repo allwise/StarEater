@@ -65,7 +65,7 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
         // The campaign shares its row with a start-level picker, once a boss has been beaten.
         picker = p.checkpoint > 0 && p.startLevels().size >= 2
         val y0 = next()
-        front += button(x, y0, if (picker) w - 98f else w, 37f, "CAMPAIGN") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = p.startLevel))) }
+        front += button(x, y0, if (picker) w - 98f else w, 37f, "START") { game.go(IntroScreen(game, SeedKey.newRun(SeedKey.random(), level = p.startLevel))) }
         from = button(x + w - 90f, y0, 90f, 37f, "") {
             val levels = p.startLevels()
             p.startLevel = levels[(levels.indexOf(p.startLevel) + 1) % levels.size]

@@ -91,6 +91,15 @@ class PowerArt(private val g: Gfx) {
         }
     }
 
+    /** The Nova button's symbol: a burst with a ring going out from it. */
+    fun nova(x: Float, y: Float, s: Float, time: Float, a: Float) {
+        val c = Pal.GOLD
+        val w = (s * 0.3f).coerceAtLeast(1.5f)
+        g.star(x, y, s * 0.8f, s * 0.3f, 6, time * 25f, c, a)
+        g.circle(x, y, s * 0.25f, Pal.WHITE, a)
+        g.ring(x, y, s * 1.05f, w * 0.5f, c, a * 0.6f)
+    }
+
     /** A pocket item's symbol, about [s] pixels from centre to edge. */
     fun item(item: Item, x: Float, y: Float, s: Float, time: Float, a: Float) {
         val c = color(item)
