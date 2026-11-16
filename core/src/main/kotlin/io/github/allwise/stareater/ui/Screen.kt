@@ -53,8 +53,6 @@ abstract class Screen(val game: StarEaterGame) {
 
     open fun show() {}
 
-    /** Called instead of [show] when the game comes back to a screen it left for a moment. */
-    open fun resume() {}
     abstract fun render(dt: Float)
 
     /** Drawn after [render], over the whole window rather than just the canvas. See [Gfx.overlay]. */

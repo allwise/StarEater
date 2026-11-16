@@ -451,14 +451,16 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
     }
 
     /**
-     * How fast the star magnet reels a star in, in tiles per second. Against a shy star it is a
-     * contest: the small maw only slows its retreat, the big one holds it in a tug-of-war that sways
-     * back and forth and, given patience, comes your way.
+     * How fast the star magnet reels a star in, in tiles per second. Against a shy star both forces
+     * are at work and you can see it: out in the far half of the magnet's reach the star still backs
+     * away, only more slowly; get within half the reach and the pull wins, harder the closer it is.
      */
     private fun magnetPull(s: Star, d: Float): Float {
         if (!shyStars) return 3f + 9f * (1f - d / loadout.magnet)
         val flee = ShyStarsRule.flee(d)
-        return if (loadout.magnet < STRONG_MAGNET) flee * 0.7f else flee * (1.04f + 0.22f * kotlin.math.sin(s.age * 1.8f))
+        val grip = loadout.magnet * SHY_GRIP
+        return if (d > grip) flee * (0.45f + 0.55f * (loadout.magnet - d) / (loadout.magnet - grip))
+        else flee + 1.5f + 6f * (1f - d / grip)
     }
 
     private fun eat(s: Star) {
@@ -953,8 +955,8 @@ class World(val spec: LevelSpec, val loadout: Loadout, val run: RunState, seed: 
         const val METEOR_WARN = 1.3f
         const val METEOR_SPEED = 15f
 
-        /** A star magnet at least this wide can hold its own against a shy star. */
-        const val STRONG_MAGNET = 3f
+        /** The share of a star magnet's reach inside which it beats a shy star's retreat. */
+        const val SHY_GRIP = 0.5f
         const val FIRST_CAPSULE = 5f
         const val CAPSULE_EVERY = 11f
         const val CAPSULE_LIFE = 12f

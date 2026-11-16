@@ -55,6 +55,12 @@ class DevOptions(spec: String) {
     val boss: String? = map["boss"]
     val bot: Boolean = map["bot"] == "1"
     val auto: Boolean = map["auto"] == "1"
+
+    /** With `screen=play`: open on the pause menu. */
+    val paused: Boolean = map["paused"] == "1"
+
+    /** Pretend to be a phone: touch wording, and the tilt and vibration options a desktop does not have. */
+    val phone: Boolean = map["phone"] == "1"
     val allSkills: Boolean = map["skills"] == "all"
     val dust: Int = map["dust"]?.toIntOrNull() ?: -1
     val seed: Long = map["seed"]?.toLongOrNull() ?: 1L
@@ -108,16 +114,17 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
 
     val devBot: Boolean get() = dev?.bot == true
     val devAuto: Boolean get() = dev?.auto == true
+    val devPaused: Boolean get() = dev?.paused == true
 
     /** True where there is a keyboard to hint at. */
-    val keyHints: Boolean get() = Gdx.app.type == Application.ApplicationType.Desktop
+    val keyHints: Boolean get() = Gdx.app.type == Application.ApplicationType.Desktop && dev?.phone != true
 
     /** True on a device that can be steered by tilting it. */
-    val canTilt: Boolean by lazy { Gdx.input.isPeripheralAvailable(Input.Peripheral.Accelerometer) }
+    val canTilt: Boolean by lazy { dev?.phone == true || Gdx.input.isPeripheralAvailable(Input.Peripheral.Accelerometer) }
 
     /** True where there is a motor to tap the player's fingers with. */
     val canBuzz: Boolean by lazy {
-        Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback) || Gdx.input.isPeripheralAvailable(Input.Peripheral.Vibrator)
+        dev?.phone == true || Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback) || Gdx.input.isPeripheralAvailable(Input.Peripheral.Vibrator)
     }
 
     /** A tiny tap through the vibration motor, where there is one and the player has not turned it off. */
@@ -193,7 +200,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
                 go(ScoresScreen(this))
             }
             "help" -> go(HelpScreen(this))
-            "options" -> go(OptionsScreen(this) { go(MenuScreen(this)) })
+            "options" -> go(OptionsScreen(this))
             "pack" -> go(PocketShop(this, run.also { it.level = 1 }, pitStop = false))
             "pitstop" -> go(PocketShop(this, run.also { it.dust = if (d.dust >= 0) d.dust.toFloat() else 180f }, pitStop = true))
             "seed" -> {
@@ -207,14 +214,13 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         }
     }
 
-    /** Switches screen. Pass [show] = false to return to a screen that is already set up. */
-    fun go(next: Screen, show: Boolean = true) {
+    fun go(next: Screen) {
         screen = next
         platform.lockOrientation(next is PlayScreen)
         // The picture slides to one side only for the level itself, to leave a bar for the thumb.
         // Every other screen sits in the middle of the window, and its backdrop runs out to the edges.
         gfx.align = if (next is PlayScreen) profile.screenAlign else 0
-        if (show) next.show() else next.resume()
+        next.show()
     }
 
     override fun resize(width: Int, height: Int) {

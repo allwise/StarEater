@@ -316,10 +316,13 @@ class SimTest {
         assertEquals(World.Phase.DEAD, fly(Gravity.HOLE).phase)
     }
 
-    /** A shy star against the star magnet: the small maw cannot hold it, the big one fights it to a draw. */
+    /**
+     * A shy star against the star magnet. Both forces show: in the far half of the magnet's reach the
+     * star still backs off, just more slowly; inside half the reach the pull wins and it comes in.
+     */
     @Test
-    fun shyStarsPutUpAFightAgainstTheMagnet() {
-        fun gapAfter(magnet: Float, seconds: Float, start: Float = 2f, track: ((Float) -> Unit)? = null): Float {
+    fun aShyStarBacksOffAtADistanceAndGivesInUpClose() {
+        fun gapAfter(magnet: Float, seconds: Float, start: Float): Float {
             val w = world(LevelGen.build(3, MoveKind.GLIDE, listOf("shy"), listOf(Eater)), Loadout(magnet = magnet))
             w.player.place(10f, 7f)
             var d = 0f
@@ -331,25 +334,112 @@ class SimTest {
                 w.player.place(10f, 7f)
                 w.player.vx = 0f; w.player.vy = 0f
                 w.update(1f / 60f, InputState())
-                if (w.stars.isEmpty()) return 0f
+                // Eaten: the field is topped straight back up, so go by the count, not by what is left.
+                if (w.collected > 0) return 0f
                 d = w.dist(w.stars[0].x, w.stars[0].y, 10f, 7f)
-                track?.invoke(d)
             }
             return d
         }
-        val free = gapAfter(0f, 0.4f)
-        val weak = gapAfter(2.2f, 0.4f)
-        assertTrue(free > 2.9f, "with no magnet a shy star should get away as it always did, got $free")
-        assertTrue(weak > 2.05f, "the small maw must not be able to reel a shy star in, got $weak")
-        assertTrue(weak < free - 0.3f, "but it should slow the star's retreat: $weak vs $free")
+        for (magnet in listOf(2.2f, 3.4f, 3.8f)) {
+            val grip = magnet * World.SHY_GRIP
+            // Out in the far half: it gets away, but not as briskly as it would with no magnet at all.
+            val far = (grip + magnet) / 2f
+            val free = gapAfter(0f, 0.3f, far)
+            val held = gapAfter(magnet, 0.3f, far)
+            assertTrue(held > far + 0.05f, "magnet $magnet: a shy star at $far should still back away, got $held")
+            assertTrue(held < free - 0.1f, "magnet $magnet: but more slowly than a free one: $held vs $free")
+            // Inside half the reach: reeled in and eaten.
+            assertEquals(0f, gapAfter(magnet, 1.5f, grip * 0.9f), "magnet $magnet: a shy star inside ${grip * 0.9f} should be pulled in")
+        }
+        // With no magnet nothing has changed: a star that close simply leaves.
+        assertTrue(gapAfter(0f, 1.5f, 1.5f) > 3f)
+    }
 
-        // The big maw: neither side wins quickly. The star sways in and out but is not simply swallowed.
-        var nearest = 99f
-        var furthest = 0f
-        val end = gapAfter(3.8f, 4f, start = 2.6f) { nearest = minOf(nearest, it); furthest = maxOf(furthest, it) }
-        assertTrue(end > 0f && nearest > 0.9f, "the big maw simply swallowed a shy star (nearest $nearest)")
-        assertTrue(furthest < 3.8f, "and it should not lose its grip either (furthest $furthest)")
-        assertTrue(furthest - nearest > 0.3f, "there should be some give and take: $nearest to $furthest")
+    /** The Serpent's tail works on them too: an enemy that runs into it is stunned and bites it through. */
+    @Test
+    fun theTailStopsEnemiesAsWellAsYou() {
+        for (move in listOf(MoveKind.GRID, MoveKind.GLIDE)) {
+            val w = world(LevelGen.build(6, move, listOf("tail"), listOf(Eater)))
+            val input = InputState()
+            w.update(1f / 60f, input)
+            w.enemies.clear()
+            // A tail laid out in a line to the left of the player, and an enemy sat on the middle of it.
+            w.tail.clear()
+            val p = w.player
+            for (i in 1..8) w.tail += io.github.allwise.stareater.sim.Pt(p.x - i, p.y)
+            val e = w.spawnEnemyAt(Eater, p.x - 4f, p.y, 0f)
+            w.fx.clear()
+            w.update(1f / 60f, input)
+            assertTrue(e.stun > 2f, "$move: the enemy should be stunned by the tail")
+            assertEquals(3, w.tail.size, "$move: and the tail bitten off where it was hit")
+            assertEquals(World.Phase.PLAYING, w.phase)
+            assertTrue(w.fx.any { it is io.github.allwise.stareater.sim.Fx.TailCut }, "$move: with an event to show for it")
+
+            // Once it has come round it gets a moment before the tail can stop it again...
+            for (i in 1..8) if (w.tail.size < 8) w.tail += io.github.allwise.stareater.sim.Pt(p.x - w.tail.size - 1, p.y)
+            e.stun = 0f
+            w.player.invuln = 99f
+            w.update(1f / 60f, input)
+            assertEquals(0f, e.stun, "$move: no stun-locking an enemy by coiling round it")
+            // ...and then it can.
+            e.tailGrace = 0f
+            e.place(p.x - 4f, p.y)
+            w.update(1f / 60f, input)
+            assertTrue(e.stun > 2f, "$move: but after that the tail bites again")
+        }
+    }
+
+    /** A sun lights up a dark level out to half its reach. A black hole does not. */
+    @Test
+    fun sunsAreLightsAndBlackHolesAreNot() {
+        var suns = 0
+        var holes = 0
+        for (seed in 1L..60L) {
+            val w = world(LevelGen.build(16, MoveKind.GLIDE, listOf("gravity", "lightsout"), listOf(Eater)), seed = seed)
+            for (well in w.wells) {
+                if (well.blackHole) { holes++; assertEquals(0f, well.light) }
+                else { suns++; assertEquals(io.github.allwise.stareater.sim.GravityRule.REACH / 2f, well.light) }
+            }
+        }
+        assertTrue(suns > 0 && holes > 0)
+        // The one in the middle of an orbit level, likewise: halfway out to the top and bottom.
+        var lit = 0
+        var dark = 0
+        for (seed in 1L..60L) {
+            val orbit = world(LevelGen.build(12, MoveKind.ORBIT, listOf("fog"), listOf(Eater)), seed = seed)
+            val sun = orbit.sun!!
+            if (sun.blackHole) { dark++; assertEquals(0f, sun.light) } else { lit++; assertEquals(orbit.h / 4f, sun.light) }
+        }
+        assertTrue(lit > 0 && dark > 0)
+    }
+
+    /** The W swims in strokes, but gets there no sooner and no later than it did at a steady pace. */
+    @Test
+    fun theWarpersStrokeAveragesOut() {
+        var sum = 0f
+        var peak = 0f
+        var low = 9f
+        val n = 10_000
+        for (i in 0 until n) {
+            val v = Warper.surge(i / n.toFloat())
+            sum += v; peak = maxOf(peak, v); low = minOf(low, v)
+        }
+        assertEquals(1f, sum / n, 0.005f)
+        assertTrue(peak > 1.5f && peak < 2.1f, "a surge you can see, not a lunge: $peak")
+        assertTrue(low >= 0.6f, "and it never stops dead: $low")
+
+        // In the world: it keeps its own time, and stands still in every sense while stunned.
+        val w = world(LevelGen.build(6, MoveKind.GLIDE, emptyList(), listOf(Warper)))
+        w.enemies.clear()
+        val e = w.spawnEnemyAt(Warper, 3f, 3f, 0f)
+        w.player.invuln = 99f
+        val before = e.stroke
+        w.update(0.1f, InputState())
+        assertTrue(e.stroke != before)
+        w.stun(e, 1f)
+        val held = e.stroke
+        w.update(0.1f, InputState())
+        assertEquals(held, e.stroke)
     }
 
     /** Checkpoints and saved levels only work if level N of a seed is the same however you got to it. */

@@ -82,6 +82,15 @@ class Enemy(val type: EnemyType) : Body() {
     /** Bosses cannot be stunned; they are slowed for this long instead. */
     var slow = 0f
 
+    /** Seconds until the Serpent rule's tail can stop this enemy again. */
+    var tailGrace = 0f
+
+    /**
+     * Where a swimmer is in its stroke, 0..1: the first half is the pull, the second the glide.
+     * Kept by the brain, read by the renderer, so the arms and the surge are the same thing.
+     */
+    var stroke = 0f
+
     /** Counts down after a boss takes a hit (render only). */
     var hurt = 0f
 
@@ -149,7 +158,11 @@ object Gravity {
 }
 
 /** A gravity well drifting about a level: a sun of stage 1 to 3, or a black hole. */
-class Well(var x: Float, var y: Float, val stage: Int, val pull: Float) {
+class Well(
+    var x: Float, var y: Float, val stage: Int, val pull: Float,
+    /** How far it lights a dark level, in tiles. A black hole lights nothing. */
+    val light: Float = 0f,
+) {
     val blackHole: Boolean get() = stage == Gravity.HOLE
 
     /** How big it is, in tiles. For a black hole this is the event horizon: inside it you are gone. */
@@ -163,6 +176,13 @@ class Well(var x: Float, var y: Float, val stage: Int, val pull: Float) {
 /** The thing in the middle of an orbit level: a sun, or a black hole. */
 class Sun(val x: Float, val y: Float, val radius: Float, val gm: Float, val stage: Int) {
     val blackHole: Boolean get() = stage == Gravity.HOLE
+
+    /** How far it lights a dark level, in tiles: halfway to the top and bottom of the field. A black hole lights nothing. */
+    val light: Float get() = if (blackHole) 0f else LIGHT
+
+    companion object {
+        const val LIGHT = 6.5f
+    }
 }
 
 /** A patch of light left behind in a Lights Out level. */
@@ -186,6 +206,9 @@ sealed class Fx {
     class EnemySpawn(val x: Float, val y: Float) : Fx()
     class EnemyGone(val x: Float, val y: Float) : Fx()
     class Stun(val x: Float, val y: Float) : Fx()
+
+    /** An enemy ran into the Serpent rule's tail and bit through it, costing [lost] segments. */
+    class TailCut(val x: Float, val y: Float, val lost: Int) : Fx()
     class Alert(val x: Float, val y: Float) : Fx()
     class MeteorWarn : Fx()
     class BossHit(val x: Float, val y: Float, val bossX: Float, val bossY: Float) : Fx()

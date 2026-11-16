@@ -89,7 +89,7 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
         extras += button(x, next(), w, 37f, "SEEDED RUN") { game.go(SeedScreen(game)) }
         extras += button(x, next(), w, 37f, "HIGH SCORES") { game.go(ScoresScreen(game)) }
         extras += button(x, next(), w, 37f, "HOW TO PLAY") { game.go(HelpScreen(game)) }
-        extras += button(x, next(), w, 37f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(MenuScreen(game, more = true)) }) }
+        extras += button(x, next(), w, 37f, "OPTIONS") { game.go(OptionsScreen(game)) }
         if (Gdx.app.type == Application.ApplicationType.Desktop) extras += button(x, next(), w, 37f, "QUIT") { Gdx.app.exit() }
         extras += button(x, next(), w, 37f, "BACK") { turn(false) }
         turn(more)

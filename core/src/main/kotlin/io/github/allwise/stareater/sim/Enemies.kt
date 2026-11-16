@@ -167,9 +167,33 @@ object Zoomer : EnemyType("zoomer", 'Z', "ZOOMER", "Lines you up, winds up, then
 
 /** W - the one that worked out the trick. Takes the shortest route *including* the wrap. */
 object Warper : EnemyType("warper", 'W', "WARPER", "Knows the wrap trick. Wraps too.", 0.8f, 4, 0.7f, wrapAware = true) {
+    override fun init(w: World, e: Enemy) {
+        // No two of them in step - and no extra roll of the dice to get there.
+        e.stroke = e.seed % 1f
+    }
+
+    /**
+     * It swims: a pull of the arms that surges it forward, then a glide while they come round
+     * again. Over a whole stroke it covers exactly the ground it would at a steady pace.
+     */
     override fun think(w: World, e: Enemy, dt: Float) {
-        e.pace = 1f
+        e.stroke = (e.stroke + dt / STROKE_TIME) % 1f
+        e.pace = surge(e.stroke)
         chase(w, e, w.targetX, w.targetY)
+    }
+
+    /** Seconds for one whole stroke. */
+    const val STROKE_TIME = 0.9f
+
+    /** The part of a stroke spent pulling; the rest is the glide. */
+    const val PULL = 0.5f
+    private const val GLIDE_PACE = 0.7f
+
+    /** Pace through a stroke: a hump over the pull, flat through the glide, averaging 1. */
+    fun surge(stroke: Float): Float {
+        if (stroke >= PULL) return GLIDE_PACE
+        val s = kotlin.math.sin(kotlin.math.PI.toFloat() * stroke / PULL)
+        return GLIDE_PACE + (1f - GLIDE_PACE) * 2f / PULL * s * s
     }
 }
 

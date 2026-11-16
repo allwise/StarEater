@@ -66,6 +66,10 @@ desktop jar and the debug APK on every push: after pushing, check that run.
 - **The picture is only slid sideways on `PlayScreen`** (`StarEaterGame.go` sets `gfx.align`). Every
   other screen is centred and the window is cleared to `Pal.BG`, so a screen whose backdrop is not
   plain `Pal.BG` right to the canvas edge shows a seam on a wide phone. Check with `window=1600x720`.
+- **The options live in `OptionsPanel`**, shown by both `OptionsScreen` and the pause menu in
+  `PlayScreen`. A new setting goes there once; check it fits both (`screen=play;paused=1;phone=1`).
+- **Darkness is drawn, not simulated**: `WorldRenderer.vis` decides what shows. The sim only carries
+  the numbers (`fogRadius`, flares, `Well.light`, `Sun.light`).
 - Buttons hide rather than disappear: screens index into `buttons` by position in places
   (`GameOverScreen.refresh`), so add new ones at the end.
 
@@ -89,6 +93,12 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
   are not listed, one line names the next unlock, and everything else lives behind MORE.
 - The quota drops by 6 after each boss (not in Endless, and not the bosses' own); rules, enemies and
   speed keep climbing regardless. Level length should stay roughly flat across the campaign.
+- Serpent: the tail stuns an enemy that touches it and is bitten off there (stun, not kill; a short
+  grace afterwards so nothing can be stun-locked).
+- Shy Stars against a star magnet: push in the far half of the magnet's reach, pull inside half.
+- Suns light dark levels (well: half its pull reach; orbit sun: a quarter of the field's height).
+  Black holes never do: dark plus a black hole is meant to stay as hard as it is.
+- The W's swim stroke changes its pace within a stroke, never its average speed.
 - No more boards than modes. Marks instead: gold star = mastered campaign run, diamond = pure run
   (nothing used from the pockets).
 - Overdrive replaced the dash everywhere. Suns only pull; black holes kill outright (a Second Wind
@@ -98,14 +108,21 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 
 ## Status
 
-*As of 2026-11-15.*
+*As of 2026-11-16.*
 
-**Playtested once (2026-11-15): "a lot of good feel".** Three small things came back and are built
-and pushed, waiting on the next playtest: menus centred on the whole screen instead of following
-the left/right setting; the campaign button reading START and its Overdrive/Nova buttons drawn as
-pictures like the pockets (no text to read mid-run); the two-page title screen with locked modes hidden; the quota dropping by
-6 after each boss because levels past 10 to 15 ran long (level 11 is now 20 stars, 19 is 28, 21 is
-24, 29 is 32).
+**Playtested (2026-11-15): "a lot of good feel".** Two rounds of small things came back and are
+built and pushed, waiting on the next playtest:
+
+- Menus centred on the whole screen instead of following the left/right setting; the two-page
+  title screen with locked modes hidden; START instead of CAMPAIGN; the campaign's Overdrive and
+  Nova buttons drawn as pictures like the pockets.
+- The quota dropping by 6 after each boss because levels past 10 to 15 ran long (level 11 is now
+  20 stars, 19 is 28, 21 is 24, 29 is 32).
+- Balance: enemies crash into the Serpent tail; shy stars push at a distance and give in up close
+  against a magnet; suns light dark levels.
+- A pause button in the status strip, and the pause menu being the options (tilt re-centres on
+  RESUME - untested on a device, as is everything about tilt).
+- The W swims in strokes (pace only; drawn from stills, never watched moving on a phone).
 
 **Still not commented on, so still open for tuning:** item prices, enemy numbers and speed on
 levels 12 to 20, the dark levels, and the Matrix, Flow and Endless tunes (never heard by ear).

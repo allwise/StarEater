@@ -199,6 +199,10 @@ class WorldRenderer(private val g: Gfx) {
             is Fx.EnemySpawn -> {}
             is Fx.EnemyGone -> burst(e.x, e.y, 6, Pal.RED, 1.6f)
             is Fx.Stun -> burst(e.x, e.y, 6, Pal.GOLD, 1.8f)
+            is Fx.TailCut -> {
+                burst(e.x, e.y, 6 + min(10, e.lost), Pal.SHIELD, 3f)
+                ring(e.x, e.y, 1.2f, 0.3f, Pal.SHIELD)
+            }
             is Fx.Alert -> ring(e.x, e.y, 1.6f, 0.3f, Pal.RED)
             is Fx.MeteorWarn -> {}
             is Fx.TimeUp -> flashWith(Pal.RED, 0.35f)
@@ -357,6 +361,13 @@ class WorldRenderer(private val g: Gfx) {
             val r = f.radius * min(1f, f.life / 2f)
             v = max(v, ((r + 0.8f - w.dist(x, y, f.x, f.y)) / 1.6f).coerceIn(0f, 1f))
         }
+        // A sun is a light of its own. A black hole is not.
+        for (well in w.wells) {
+            if (v >= 1f) break
+            if (well.light > 0f) v = max(v, ((well.light + 0.8f - w.dist(x, y, well.x, well.y)) / 1.6f).coerceIn(0f, 1f))
+        }
+        val sun = w.sun
+        if (sun != null && sun.light > 0f && v < 1f) v = max(v, ((sun.light + 0.8f - w.dist(x, y, sun.x, sun.y)) / 1.6f).coerceIn(0f, 1f))
         return v
     }
 
@@ -496,6 +507,16 @@ class WorldRenderer(private val g: Gfx) {
             at(f.x, f.y, f.radius * T * 1.5f) { x, y ->
                 g.glow(x, y, f.radius * T * 1.6f * fade, FLARE_LIGHT, 0.17f * fade)
             }
+        }
+        for (well in w.wells) if (well.light > 0f) sunlight(well.x, well.y, well.light)
+        w.sun?.let { if (it.light > 0f) sunlight(it.x, it.y, it.light) }
+    }
+
+    /** The pool of light a sun throws in a dark level, with a faint rim where it gives out. */
+    private fun sunlight(sx: Float, sy: Float, radius: Float) {
+        at(sx, sy, radius * T * 1.7f) { x, y ->
+            g.glow(x, y, radius * T * 1.7f, FLARE_LIGHT, 0.3f)
+            g.ring(x, y, radius * T, 1.5f, Pal.GOLD, 0.1f)
         }
     }
 

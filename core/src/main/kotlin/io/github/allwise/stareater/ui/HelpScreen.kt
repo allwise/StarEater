@@ -41,8 +41,8 @@ class HelpScreen(game: StarEaterGame) : Screen(game) {
         section(
             "CONTROLS",
             if (game.keyHints) "Move: arrows or WASD.  Buttons: SPACE, E, C or 1, 2, 3.  Pause: ESC.  Music: M.  Or drag with the mouse."
-            else "Drag anywhere to steer, or turn on tilt steering in the options. In classic levels a quick tap steps " +
-                "once towards your finger. The round buttons down the edge are yours to tap.",
+            else "Drag anywhere to steer, or tilt (see the options). In classic levels a quick tap steps once " +
+                "towards your finger. Tap the round buttons down the edge. || pauses, with the options.",
         )
         section(
             "THE RUN",

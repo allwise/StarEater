@@ -52,8 +52,8 @@ Run the tests:
 | Top button: Overdrive *(skill)*, or pocket 1 | `SPACE` or `1` | Tap it |
 | Middle button: Nova pulse *(skill)*, or pocket 2 | `E` or `2` | Tap it |
 | Bottom button: pocket 3 | `C` or `3` | Tap it |
-| Pause | `ESC` or `P` | Back button |
-| Music on/off | `M` | Volumes are in OPTIONS |
+| Pause | `ESC` or `P` | The `||` button in the status strip, or the back button |
+| Music on/off | `M` | Volumes are in the options, which are also the pause menu |
 | Fullscreen | `F11` | |
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
@@ -69,7 +69,9 @@ it) and the Nova burst, which charges as you eat.
 
 ### Options
 
-Under MORE on the title screen, and in the pause menu.
+Under MORE on the title screen - and the pause menu *is* the options, so volume, the side the
+picture sits on and the controls can all be changed in the middle of a level. RESUME goes back to
+it; tilt steering takes however the phone is held at that moment as level.
 
 - **Music** and **sound** volume, ten steps each (0 is off).
 - **Screen: left / centre / right.** The picture is always 16:9. On a screen wider than that, this
@@ -112,7 +114,10 @@ levels, while everything is new, and only gently after that, so the back two thi
 are a matter of practice rather than a wall.
 
 In the dark levels (Dark Nebula, Lights Out) there are fewer enemies and they are a little slower,
-and anything outside your light shows as a pair of eyes, so nothing arrives out of nowhere.
+and anything outside your light shows as a pair of eyes, so nothing arrives out of nowhere. A sun
+is a light too: a gravity-well sun shows everything out to half the reach of its pull, and the sun
+in the middle of an orbit level lights halfway out to the top and bottom of the field. Black holes
+light nothing, so a dark level with a black hole in it is as hard as it ever was.
 
 ### Movement modes
 
@@ -140,13 +145,13 @@ Things that pull come in two kinds, in orbit levels and in the Gravity Wells rul
 |---|---|---|
 | Dark Nebula | You only see what is near you. Distant stars still glimmer. | all |
 | Debris Field | Walls. Smart enemies path around them, dim ones get stuck. | classic, glide |
-| Shy Stars | Stars drift away as you approach. Cut them off with a wrap. The small star magnet only slows them; the big one gets a tug-of-war. | classic, glide |
+| Shy Stars | Stars drift away as you approach. Cut them off with a wrap. A star magnet fights it, and you can see both: in the far half of the magnet's reach a star still backs off, only slower; inside half the reach the pull wins. | classic, glide |
 | Fading Light | Stars burn out if you take too long. | classic, glide |
 | Swarm | Twice the enemies, each a bit slower. | all |
 | Countdown | A clock that only stars can top up. Run out and you take a hit. | all |
 | Meteor Shower | A row or column flashes, then gets flattened. Rocks stun enemies too. | all |
 | Restless | No brakes: you can steer but never stop. | classic, glide |
-| Serpent | Every star grows your tail, and biting it hurts. | classic, glide |
+| Serpent | Every star grows your tail, and biting it hurts. It works on them too: an enemy that runs into the tail is stunned and bites it off there, so it is a wall that holds once and then needs to grow back. | classic, glide |
 | Gravity Wells | Suns that drag you off course and the odd black hole. One or two in glide; in the scroller up to three drift down the screen. | glide, scroller |
 | Inversion | The edges are solid for you, and open for *them*. | all |
 | Deep Space | The field is four screens big and the camera follows you. Arrows on the rim point at off-screen stars. It still wraps. | classic, glide |
@@ -162,7 +167,7 @@ Dark Nebula and Lights Out are never rolled together.
 | `S` | Stalker | Aims at where you are heading, to cut you off. | 1 |
 | `B` | Bouncer | Ricochets around diagonally and ignores you. | 2 |
 | `Z` | Zoomer | Prowls, lines you up, telegraphs, then charges. | 3 |
-| `W` | Warper | The one that learned the trick: takes the wrapped route. | 4 |
+| `W` | Warper | The one that learned the trick: takes the wrapped route. It swims: a surge with each pull of its arms, then a glide. | 4 |
 | `H` | Hive | Slow, but hatches fast, short-lived mites (`e`). | 6 |
 
 On classic (grid) levels the enemies are their letters, as in the original. Everywhere else they
@@ -406,6 +411,8 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `dust` | Starting stardust |
 | `bot=1` | Let the autopilot play |
 | `auto=1` | Skip level briefings automatically (handy with `bot=1`) |
+| `paused=1` | With `screen=play`: open on the pause menu |
+| `phone=1` | Pretend to be a phone: touch wording, and the tilt and vibration options |
 | `shots`, `out` | Save screenshots at these times (seconds) into this directory, then exit |
 
 ## Ideas not built yet

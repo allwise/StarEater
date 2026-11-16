@@ -61,9 +61,10 @@ class Creatures(private val g: Gfx) {
                 bouncer(t)
             }
             Zoomer -> zoomer(e, t)
-            Warper -> wings(t, 1f)
+            // The Warper's stroke is the sim's: the arms pull as it surges. The Warden just keeps time.
+            Warper -> wings(e.stroke)
             Warden -> {
-                wings(t * 0.6f, 1f)
+                wings((t * 0.76f) % 1f)
                 // Its pet rocks.
                 for (i in 0 until 3) {
                     val ang = t * 1.7f + i * MathUtils.PI2 / 3f
@@ -242,23 +243,38 @@ class Creatures(private val g: Gfx) {
 
     // --- W: wings ----------------------------------------------------------------------------
 
-    private fun wings(t: Float, size: Float) {
-        val flap = MathUtils.sin(t * 8f)
-        val span = (0.95f + 0.2f * flap) * size
-        val sweep = 0.22f * flap
-        // A ghost of itself, half a beat behind: it is never quite all here.
+    /**
+     * The W swims breaststroke. [stroke] runs 0..1: through the first half the arms sweep from
+     * reaching out wide to tucked back along the body, and it surges; through the second they come
+     * round to the front again while it glides.
+     */
+    private fun wings(stroke: Float) {
+        // A ghost of itself, a moment behind: it is never quite all here.
         val a = alpha
         alpha = a * 0.3f
-        wingPath(span * 1.12f, -sweep, -0.35f)
+        wingPath(pull((stroke + 0.85f) % 1f), -0.35f, 1.1f)
         alpha = a
-        wingPath(span, sweep, 0f)
+        wingPath(pull(stroke), 0f, 1f)
     }
 
-    private fun wingPath(span: Float, sweep: Float, shift: Float) {
-        seg(-0.6f - sweep + shift, -1.15f * span, 0.5f + shift, -0.55f * span)
-        seg(0.5f + shift, -0.55f * span, -0.2f + shift, 0f)
-        seg(-0.2f + shift, 0f, 0.5f + shift, 0.55f * span)
-        seg(0.5f + shift, 0.55f * span, -0.6f - sweep + shift, 1.15f * span)
+    /** How far through the pull the arms are: 0 reaching forward, 1 swept right back. */
+    private fun pull(stroke: Float): Float {
+        val p = if (stroke < Warper.PULL) stroke / Warper.PULL else 1f - (stroke - Warper.PULL) / (1f - Warper.PULL)
+        return p * p * (3f - 2f * p)
+    }
+
+    private fun wingPath(pull: Float, shift: Float, size: Float) {
+        // The arm tips swing from ahead of the shoulders and wide, to behind them and close in;
+        // the elbows follow a little, and the body stretches out as it shoots forward.
+        val tipX = 0.15f - 1.05f * pull + shift
+        val tipY = (1.25f - 0.5f * pull) * size
+        val elbowX = 0.5f - 0.12f * pull + shift
+        val elbowY = (0.6f - 0.12f * pull) * size
+        val chest = -0.2f - 0.1f * pull + shift
+        seg(tipX, -tipY, elbowX, -elbowY)
+        seg(elbowX, -elbowY, chest, 0f)
+        seg(chest, 0f, elbowX, elbowY)
+        seg(elbowX, elbowY, tipX, tipY)
     }
 
     // --- H: it breathes, and something is growing on the crossbar ----------------------------

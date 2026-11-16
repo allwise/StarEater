@@ -60,7 +60,7 @@ object Rules {
         RuleInfo("countdown", "COUNTDOWN", "The clock is running. Every star buys time.", 3, ALL_MOVES) { CountdownRule() },
         RuleInfo("meteors", "METEOR SHOWER", "Rows and columns flash, then get flattened.", 3, ALL_MOVES) { MeteorRule() },
         RuleInfo("restless", "RESTLESS", "No brakes. You can steer, you cannot stop.", 3, FLAT) { RestlessRule() },
-        RuleInfo("tail", "SERPENT", "Every star grows your tail. Do not bite it.", 4, FLAT) { TailRule() },
+        RuleInfo("tail", "SERPENT", "Stars grow your tail. It stuns them - and bites you.", 4, FLAT) { TailRule() },
         RuleInfo("gravity", "GRAVITY WELLS", "Suns pull you off course. Black holes swallow you.", 4, FLOATY) { GravityRule() },
         RuleInfo("inversion", "INVERSION", "The edges are solid for you - and open for them.", 5, ALL_MOVES) { InversionRule() },
         RuleInfo(
@@ -265,6 +265,7 @@ class TailRule : Rule() {
             val maxLen = min(if (grid) 36 else 60, if (grid) segments else segments * 2)
             while (w.tail.size > maxLen) w.tail.removeAt(w.tail.size - 1)
         }
+        snag(w, dt)
         if (p.invuln > 0f) return
         // The freshest few points are right behind you; only the older ones can bite.
         val from = if (grid) 0 else 4
@@ -278,6 +279,38 @@ class TailRule : Rule() {
                 return
             }
         }
+    }
+
+    /**
+     * The tail bites them as well. An enemy that runs into it is stunned - and bites through it: the
+     * tail from there back is gone until it has grown out again, so the wall you drag behind you
+     * holds once and then has a gap in it. Afterwards the enemy gets a moment's grace, or it could
+     * be kept stunned for ever by coiling round it.
+     */
+    private fun snag(w: World, dt: Float) {
+        for (e in w.enemies) {
+            if (e.tailGrace > 0f) e.tailGrace -= dt
+            if (!e.active || e.type.boss || e.tailGrace > 0f) continue
+            val reach = e.radius + TAIL_RADIUS
+            for (i in w.tail.indices) {
+                val t = w.tail[i]
+                if (hypot(w.dx(t.x, e.x, true), w.dy(t.y, e.y, true)) >= reach) continue
+                w.stun(e, SNAG_STUN)
+                e.tailGrace = SNAG_STUN + SNAG_GRACE
+                w.fx += Fx.TailCut(t.x, t.y, w.tail.size - i)
+                while (w.tail.size > i) w.tail.removeAt(w.tail.size - 1)
+                break
+            }
+        }
+    }
+
+    companion object {
+        /** How thick the tail is to an enemy, in tiles. */
+        const val TAIL_RADIUS = 0.2f
+
+        /** Seconds an enemy is out of it after running into the tail, and how long it is then immune. */
+        const val SNAG_STUN = 2.5f
+        const val SNAG_GRACE = 1.5f
     }
 }
 
@@ -308,7 +341,8 @@ class GravityRule : Rule() {
             if (hole) holesLeft--
             // Dwarfs and middling suns early on; the giants turn up from level 8.
             val stage = if (hole) Gravity.HOLE else 1 + w.rng.nextInt(min(3, 1 + n / 4))
-            w.wells += Well(x, y, stage, (if (scrolling) 34f else 22f) * Gravity.factor(stage))
+            // A sun is a light: in a dark level it shows everything out to half the reach of its pull.
+            w.wells += Well(x, y, stage, (if (scrolling) 34f else 22f) * Gravity.factor(stage), if (hole) 0f else REACH / 2f)
         }
     }
 
@@ -355,11 +389,12 @@ class GravityRule : Rule() {
         }
     }
 
-    private companion object {
+    companion object {
+        /** How far out a well's pull is felt, in tiles. */
         const val REACH = 9f
 
         /** How far off the top and bottom a scrolling well goes before it comes round again. */
-        const val MARGIN = 3f
+        private const val MARGIN = 3f
     }
 }
 

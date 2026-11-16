@@ -31,6 +31,9 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     private val bot: Bot? = if (game.devBot) Bot() else null
     private var paused = false
 
+    /** The pause menu is the options, there and then: nothing in it needs the level to be left. */
+    private val options = OptionsPanel(this, game) { game.gfx.align = game.profile.screenAlign }
+
     private var lastTick = 0
     private var klaxon = 0f
 
@@ -55,14 +58,15 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         if (run.mode == GameMode.ENDLESS) game.audio.tempo(tempoFor(run.level))
         // The player beams in: a soft whoop to go with it.
         game.audio.play(Sfx.WRAP, 0.7f, 0.8f)
-        button(Gfx.W / 2f - 140f, 268f, 280f, 44f, "RESUME") { paused = false }
-        button(Gfx.W / 2f - 140f, 214f, 280f, 44f, "OPTIONS") { game.go(OptionsScreen(game) { game.go(this, show = false) }) }
-        button(Gfx.W / 2f - 140f, 160f, 280f, 44f, "END RUN") { game.go(GameOverScreen(game, run)) }
-    }
-
-    /** Back from the options: still paused, and whatever was changed in there now applies. */
-    override fun resume() {
-        controls.reset()
+        // The pause menu. RESUME goes first so that it is where the focus starts; END RUN sits well
+        // away from it, and small, so that it is not the thing a hurried thumb lands on.
+        button(Gfx.W / 2f - 150f, 30f, 300f, 46f, "RESUME") { unpause() }
+        button(Gfx.W - 176f, 34f, 160f, 38f, "END RUN") {
+            game.profile.save()
+            game.go(GameOverScreen(game, run))
+        }.small = true
+        options.build()
+        if (game.devPaused) pauseGame()
     }
 
     private val tilting: Boolean get() = game.profile.tilt && game.canTilt
@@ -74,8 +78,18 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
     }
 
+    /**
+     * Back to the level. Whatever was changed in the menu is kept, and the controls start afresh:
+     * nothing held down, and tilt steering takes however the phone is held now as level.
+     */
+    private fun unpause() {
+        paused = false
+        game.profile.save()
+        controls.reset()
+    }
+
     override fun back() {
-        if (paused) paused = false else pauseGame()
+        if (paused) unpause() else pauseGame()
     }
 
     override fun render(dt: Float) {
@@ -111,6 +125,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
         renderer.draw(world, if (paused) 0f else dt)
         renderer.hud(world, game.keyHints)
+        if (world.phase == World.Phase.PLAYING && !paused) pauseButton()
         banner()
 
         when (world.phase) {
@@ -133,11 +148,24 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         }
 
         if (paused) {
-            g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, 0.75f)
-            g.text(g.big, "PAUSED", Gfx.W / 2f, 368f, Pal.TEXT, 1f, Align.center)
+            g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, 0.93f)
+            title("PAUSED")
+            options.draw()
             drawButtons()
         }
     }
+
+    /** Two bars in the status strip: the way into the pause menu for a finger or the mouse. */
+    private fun pauseButton() {
+        val x = PAUSE_X
+        val y = PAUSE_Y
+        g.rect(x - 19f, y - 15f, 38f, 30f, Pal.PANEL_HI, 0.9f)
+        g.frame(x - 19f, y - 15f, 38f, 30f, 1.5f, Pal.LINE)
+        g.rect(x - 7f, y - 7f, 5f, 14f, Pal.DIM)
+        g.rect(x + 2f, y - 7f, 5f, 14f, Pal.DIM)
+    }
+
+    private fun onPauseButton(x: Float, y: Float): Boolean = kotlin.math.abs(x - PAUSE_X) < 30f && y > WorldRenderer.FIELD_H
 
     /** Gives this frame's events a voice. Must run before the renderer swallows them. */
     private fun sounds() {
@@ -204,7 +232,8 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 game.buzz()
             }
             is Fx.EdgeOpen -> audio.play(Sfx.UNSEAL)
-            is Fx.StarLost, is Fx.EnemyGone -> {}
+            // The stun that goes with a bitten tail has already made its noise.
+            is Fx.StarLost, is Fx.EnemyGone, is Fx.TailCut -> {}
         }
         // The edge-block klaxon keeps honking for as long as the warning lasts.
         if (world.sealWarn > 0f) {
@@ -309,7 +338,9 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     override fun keyUp(key: Int) = controls.keyUp(key)
 
     override fun touchDown(x: Float, y: Float, pointer: Int) {
-        if (paused) super.touchDown(x, y, pointer) else controls.touchDown(x, y, pointer)
+        if (paused) super.touchDown(x, y, pointer)
+        else if (onPauseButton(x, y)) pauseGame()
+        else controls.touchDown(x, y, pointer)
     }
 
     override fun touchUp(x: Float, y: Float, pointer: Int) {
@@ -327,6 +358,14 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
     private companion object {
         /** How much the endless tune is hurried by wave [n]: three per cent a wave, up to a third faster. */
         fun tempoFor(n: Int): Float = (1f + 0.03f * (n - 1)).coerceAtMost(1.33f)
+
+        /**
+         * The pause button, in the status strip between the quota and the score. It keeps to the top
+         * row, clear of the line of rule names, which can run this far along on a late arcade level.
+         * A tap anywhere in the strip above or below it counts.
+         */
+        const val PAUSE_X = 772f
+        const val PAUSE_Y = Gfx.H - 23f
 
         /** Gentle, normal, twitchy. */
         val TILT_SENSITIVITY = floatArrayOf(0.65f, 1f, 1.6f)
