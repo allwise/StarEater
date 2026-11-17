@@ -39,6 +39,8 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
     private val front = ArrayList<Button>()
     private val extras = ArrayList<Button>()
 
+    private lateinit var daily: Button
+
     /** What the next boss opens, said in a line under the front page rather than with a dead button. */
     private var hint = ""
     private var hintY = 0f
@@ -72,6 +74,14 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
             p.save()
         }
         from.small = true
+
+        // Today's seed: the same run for everyone, always from level 1. It glows until you have had a go.
+        daily = button(x, next(), w, 37f, "DAILY RUN") {
+            p.startedDaily(SeedKey.today())
+            p.lastSeed = SeedKey.dailyNow()
+            game.go(IntroScreen(game, SeedKey.dailyRun()))
+        }.also { it.accent = Pal.STAR }
+        front += daily
 
         // The other three modes open one boss at a time, and are not on the menu until they do.
         val modes = listOf(GameMode.MATRIX, GameMode.FLOW, GameMode.ENDLESS)
@@ -136,6 +146,7 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
 
         from.label = "FROM ${game.profile.startLevel}"
         drawButtons()
+        if (daily.visible) dailyBeacon(daily, game.profile.dailyWaiting(SeedKey.today()))
         if (!more && hint.isNotEmpty()) g.text(g.tiny, hint, cx, hintY, Pal.DIM, 0.9f, Align.center)
 
         val p = game.profile
@@ -146,10 +157,29 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
         if (p.bestLevel > 0) g.text(g.small, "BEST: LEVEL ${p.bestLevel}   RUNS: ${p.totalRuns}", Gfx.W - 20f, 40f, Pal.DIM, 1f, Align.right)
     }
 
+    /**
+     * A little star at the left of the daily button. Until today's run has been started it is lit
+     * and sends out rings; after that it sits there dim until tomorrow's comes round.
+     */
+    private fun dailyBeacon(b: Button, waiting: Boolean) {
+        val x = b.x + 26f
+        val y = b.cy
+        if (waiting) {
+            for (i in 0 until 3) {
+                val t = (age * 0.7f + i / 3f) % 1f
+                g.ring(x, y, 7f + 22f * t, 2f, Pal.STAR, 0.7f * (1f - t))
+            }
+            g.glow(x, y, 26f, Pal.STAR, 0.5f + 0.2f * MathUtils.sin(age * 4f))
+            g.star(x, y, 9f, 4f, 5, 90f + age * 40f, Pal.STAR)
+        } else {
+            g.star(x, y, 8f, 3.5f, 5, 90f, Pal.DIM, 0.6f)
+        }
+    }
+
     private companion object {
         /** The top button's y, and the step from one row to the next. */
-        const val TOP = 322f
-        const val PITCH = 43f
+        const val TOP = 330f
+        const val PITCH = 42f
 
         /** Strips in the fade at each side of the demo. */
         const val FADE = 16

@@ -50,7 +50,8 @@ desktop jar and the debug APK on every push: after pushing, check that run.
 - **Levels are a pure function of seed, mode and level number** (`LevelGen.forSeed`). Checkpoints,
   seed boards and "same key, same run" all rest on that. Adding or reordering a random draw in level
   generation, or in a rule's `setup`, silently changes every existing seed. Sometimes that is fine,
-  but do it on purpose.
+  but do it on purpose. (Last done 2026-11-17: glide levels with Deep Space take one extra draw for
+  the Gravity Wells pairing, so their rosters changed; no other level did.)
 - **Things saved by name**: `Skill` constants (`DASH` and `PHASE_DASH` are now Overdrive and
   Afterburner but keep their old names for that reason), `GameMode.id`, the profile's keys. Old saves
   must keep loading: `Profile` has small migrations for earlier formats, each with a test.
@@ -91,11 +92,17 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 - The title screen's front page is only what can be played now, plus the skill tree. The campaign
   button just says START (the other modes come later, once you are familiar). Locked modes
   are not listed, one line names the next unlock, and everything else lives behind MORE.
-- The quota drops by 6 after each boss (not in Endless, and not the bosses' own); rules, enemies and
+- The quota drops by 7 after each boss (not in Endless, and not the bosses' own); rules, enemies and
   speed keep climbing regardless. Level length should stay roughly flat across the campaign.
 - Serpent: the tail stuns an enemy that touches it and is bitten off there (stun, not kill; a short
   grace afterwards so nothing can be stun-locked).
 - Shy Stars against a star magnet: push in the far half of the magnet's reach, pull inside half.
+- Gravity wells can fling you past top speed (up to +60%, fading; `Player.fling`). Dwarf suns pull
+  1.6x what they did, suns 1.35x, giants 1.2x; black holes and the orbit sun are unchanged.
+- Orbit levels: more stars (they only ride the inner part of a big field), 3/4 the enemies.
+- A glide level with Deep Space gets Gravity Wells 60% of the time, and a deep field gets 2 more suns.
+- The daily run is on the title screen's front page, always from level 1; its star radiates until
+  today's has been started (`Profile.dailyDay`).
 - Suns light dark levels (well: half its pull reach; orbit sun: a quarter of the field's height).
   Black holes never do: dark plus a black hole is meant to stay as hard as it is.
 - The W's swim stroke changes its pace within a stroke, never its average speed.
@@ -108,7 +115,7 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 
 ## Status
 
-*As of 2026-11-16.*
+*As of 2026-11-17.*
 
 **Playtested (2026-11-15): "a lot of good feel".** Two rounds of small things came back and are
 built and pushed, waiting on the next playtest:
@@ -116,13 +123,16 @@ built and pushed, waiting on the next playtest:
 - Menus centred on the whole screen instead of following the left/right setting; the two-page
   title screen with locked modes hidden; START instead of CAMPAIGN; the campaign's Overdrive and
   Nova buttons drawn as pictures like the pockets.
-- The quota dropping by 6 after each boss because levels past 10 to 15 ran long (level 11 is now
-  20 stars, 19 is 28, 21 is 24, 29 is 32).
+- The quota dropping by 7 after each boss because levels past 10 to 15 ran long (level 11 is now
+  19 stars, 19 is 27, 21 is 22, 29 is 30).
 - Balance: enemies crash into the Serpent tail; shy stars push at a distance and give in up close
   against a magnet; suns light dark levels.
 - A pause button in the status strip, and the pause menu being the options (tilt re-centres on
   RESUME - untested on a device, as is everything about tilt).
 - The W swims in strokes (pace only; drawn from stills, never watched moving on a phone).
+- Round three (2026-11-17): the scroller's sideways speed with a part-pushed stick; the daily run
+  on the front page, always from level 1; stronger wells that can fling you; orbit levels with more
+  stars and fewer enemies; Deep Space and Gravity Wells paired up.
 
 **Still not commented on, so still open for tuning:** item prices, enemy numbers and speed on
 levels 12 to 20, the dark levels, and the Matrix, Flow and Endless tunes (never heard by ear).

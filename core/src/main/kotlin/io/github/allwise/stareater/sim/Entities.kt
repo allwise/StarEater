@@ -35,6 +35,13 @@ class Player : Body() {
     /** True once the player has moved at all this level (the Restless rule waits for it). */
     var started = false
 
+    /**
+     * Speed past the ship's top speed that a gravity well has given it, in tiles per second. A fall
+     * towards a sun can carry you faster than your engine can; this is how much faster you are
+     * allowed to be right now. It fades away, and is never more than you are actually going.
+     */
+    var fling = 0f
+
     var shields = 0
     var shieldRegen = 0f
     var invuln = 0f

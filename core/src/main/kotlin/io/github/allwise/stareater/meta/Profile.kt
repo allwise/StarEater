@@ -36,6 +36,10 @@ class Profile(private val store: KeyValueStore) {
         private set
     var initials = "AAA"
 
+    /** The day (see [SeedKey.today]) a daily run was last started, or -1 for never. */
+    var dailyDay = -1L
+        private set
+
     /** Key of the seed most recently played or looked up. */
     var lastSeed = ""
     var musicOn = true
@@ -84,6 +88,7 @@ class Profile(private val store: KeyValueStore) {
         bestLevel = store.get(K_BEST)?.toIntOrNull() ?: 0
         initials = store.get(K_NAME)?.takeIf { it.length == 3 } ?: "AAA"
         lastSeed = store.get(K_SEED)?.takeIf { SeedKey.isValid(it) } ?: ""
+        dailyDay = store.get(K_DAILY)?.toLongOrNull() ?: -1L
         musicOn = store.get(K_MUSIC) != "0"
         sfxOn = store.get(K_SFX) != "0"
         musicVol = store.get(K_MUSIC_VOL)?.toIntOrNull() ?: VOLUME_DEFAULT
@@ -122,6 +127,15 @@ class Profile(private val store: KeyValueStore) {
     }
 
     fun loadout(): Loadout = Skill.loadout(owned)
+
+    /** True until today's daily run has been started. */
+    fun dailyWaiting(today: Long): Boolean = dailyDay != today
+
+    /** Notes that today's daily run has been started. */
+    fun startedDaily(today: Long) {
+        dailyDay = today
+        save()
+    }
 
     fun canBuy(s: Skill): Boolean = s !in owned && stardust >= s.cost && (s.requires == null || s.requires in owned)
 
@@ -247,7 +261,7 @@ class Profile(private val store: KeyValueStore) {
             it.initials = initials; it.lastSeed = lastSeed; it.musicOn = musicOn; it.sfxOn = sfxOn
             it.musicVol = musicVol; it.sfxVol = sfxVol; it.screenAlign = screenAlign
             it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics
-            it.checkpoint = checkpoint; it.startLevel = startLevel
+            it.checkpoint = checkpoint; it.startLevel = startLevel; it.dailyDay = dailyDay
             saved.copyInto(it.saved)
             it.owned += owned; it.scores += scores
             it.save()
@@ -260,6 +274,7 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_BEST, bestLevel.toString())
         store.put(K_NAME, initials)
         store.put(K_SEED, lastSeed)
+        store.put(K_DAILY, dailyDay.toString())
         store.put(K_MUSIC, if (musicOn) "1" else "0")
         store.put(K_SFX, if (sfxOn) "1" else "0")
         store.put(K_MUSIC_VOL, musicVol.toString())
@@ -295,6 +310,7 @@ class Profile(private val store: KeyValueStore) {
         private const val K_HAPTICS = "haptics"
         private const val KEEP = 120
         private const val K_SEED = "lastSeed"
+        private const val K_DAILY = "dailyDay"
         private const val K_MUSIC = "music"
         private const val K_SFX = "sfx"
         private const val K_DUST = "stardust"

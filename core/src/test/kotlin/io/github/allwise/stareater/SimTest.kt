@@ -442,6 +442,97 @@ class SimTest {
         assertEquals(held, e.stroke)
     }
 
+    /** Sideways speed in the scroller: half a push on the stick has to get you most of the way, as it does in glide. */
+    @Test
+    fun theScrollerIsNoSlowerSidewaysThanGlide() {
+        fun after(move: MoveKind, push: Float, seconds: Float): Float {
+            val w = world(LevelGen.build(8, move, emptyList(), listOf(Eater)))
+            val input = InputState()
+            input.moveX = push
+            repeat((seconds * 60).toInt()) { w.enemies.clear(); w.player.invuln = 9f; w.update(1f / 60f, input) }
+            return w.player.vx
+        }
+        val glideTop = after(MoveKind.GLIDE, 1f, 2f)
+        val scrollTop = after(MoveKind.SCROLL, 1f, 2f)
+        assertTrue(scrollTop >= glideTop, "flat out, the scroller should be at least as fast: $scrollTop vs $glideTop")
+        val half = after(MoveKind.SCROLL, 0.5f, 1f)
+        assertTrue(half > 0.85f * scrollTop, "half a push should get most of top speed in the scroller, got $half of $scrollTop")
+        // And it still stops quickly when you let go.
+        val w = world(LevelGen.build(8, MoveKind.SCROLL, emptyList(), listOf(Eater)))
+        w.player.vx = 9f
+        repeat(30) { w.enemies.clear(); w.player.invuln = 9f; w.update(1f / 60f, InputState()) }
+        assertTrue(w.player.vx < 2f, "letting go should stop it within half a second, still at ${w.player.vx}")
+    }
+
+    /** A well can fling you past your top speed on the way past it, and the extra fades away after. */
+    @Test
+    fun aSunCanSlingYouFasterThanYourEngine() {
+        for (stage in 1..3) {
+            val w = world(LevelGen.build(10, MoveKind.GLIDE, listOf("gravity"), listOf(Eater)))
+            w.wells.clear()
+            w.wells += Well(15f, 7.5f, stage, 22f * Gravity.factor(stage) * floatArrayOf(1f, 1.6f, 1.35f, 1.2f)[stage])
+            // Flat out along a line that passes two tiles from the sun.
+            w.player.place(6f, 5.5f)
+            w.player.vx = 8.5f; w.player.vy = 0f
+            val input = InputState()
+            input.moveX = 1f
+            var peak = 0f
+            repeat(90) {
+                w.enemies.clear(); w.player.invuln = 9f
+                w.update(1f / 60f, input)
+                peak = maxOf(peak, kotlin.math.hypot(w.player.vx, w.player.vy))
+            }
+            assertTrue(peak > 8.5f * 1.08f, "stage $stage: the fall past the sun should take you over top speed, peak $peak")
+            input.moveX = 0f
+            w.wells.clear()
+            repeat(240) { w.enemies.clear(); w.player.invuln = 9f; w.update(1f / 60f, input) }
+            assertTrue(w.player.fling < 0.05f, "stage $stage: and the fling should be gone once you are clear")
+        }
+        // Without a well, nothing has changed: top speed is top speed.
+        val w = world(LevelGen.build(10, MoveKind.GLIDE, emptyList(), listOf(Eater)))
+        val input = InputState()
+        input.moveX = 1f
+        repeat(120) { w.enemies.clear(); w.update(1f / 60f, input) }
+        assertEquals(8.5f, w.player.vx, 0.01f)
+    }
+
+    /** The solar system is a big field: more stars to make up for it, and fewer things hunting you. */
+    @Test
+    fun orbitLevelsHaveMoreStarsAndFewerEnemies() {
+        for (n in listOf(5, 12, 18, 25)) {
+            val orbit = LevelGen.build(n, MoveKind.ORBIT, emptyList(), listOf(Eater))
+            val glide = LevelGen.build(n, MoveKind.GLIDE, emptyList(), listOf(Eater))
+            assertTrue(orbit.starsOnField >= glide.starsOnField + 3, "level $n: ${orbit.starsOnField} stars vs ${glide.starsOnField}")
+            assertTrue(orbit.enemyMax < glide.enemyMax, "level $n: ${orbit.enemyMax} enemies vs ${glide.enemyMax}")
+            assertTrue(orbit.spawnInterval > glide.spawnInterval)
+        }
+    }
+
+    /** Deep Space and Gravity Wells meet often enough to be found, and a deep field gets suns enough for it. */
+    @Test
+    fun deepSpaceOftenComesWithSuns() {
+        var deepGlide = 0
+        var withGravity = 0
+        var both = 0
+        var total = 0
+        for (seed in 1L..300L) for (n in 4..29) {
+            if (n % 10 == 0) continue
+            val s = LevelGen.forSeed(seed, n)
+            total++
+            if ("deep" in s.modifiers && "gravity" in s.modifiers) both++
+            if (s.move == MoveKind.GLIDE && "deep" in s.modifiers) {
+                deepGlide++
+                if ("gravity" in s.modifiers) withGravity++
+            }
+            assertTrue(s.ruleCount <= LevelSpec.MAX_RULES)
+        }
+        assertTrue(withGravity > deepGlide / 2, "most glide levels with Deep Space should bring suns: $withGravity of $deepGlide")
+        assertTrue(both > total / 50, "the pair should turn up a few times a campaign: $both of $total")
+
+        val w = world(LevelGen.build(12, MoveKind.GLIDE, listOf("deep", "gravity"), listOf(Eater)))
+        assertTrue(w.wells.size >= 4, "a field four screens big should have more than one or two suns, has ${w.wells.size}")
+    }
+
     /** Checkpoints and saved levels only work if level N of a seed is the same however you got to it. */
     @Test
     fun aLevelIsTheSameHoweverYouReachIt() {
@@ -789,19 +880,19 @@ class SimTest {
         assertTrue(run.score > 0 && run.dust > 0f)
     }
 
-    /** Levels past 10 ran long: every boss now takes six stars back off the quota, twists and all else as before. */
+    /** Levels past 10 ran long: every boss now takes seven stars back off the quota, twists and all else as before. */
     @Test
     fun theQuotaDropsBackAfterEveryBoss() {
         fun quota(n: Int) = LevelGen.build(n, MoveKind.GRID, emptyList(), listOf(Eater)).quota
         assertEquals(24, quota(9))
-        assertEquals(20, quota(11))
-        assertEquals(28, quota(19))
-        assertEquals(24, quota(21))
-        assertEquals(32, quota(29))
+        assertEquals(19, quota(11))
+        assertEquals(27, quota(19))
+        assertEquals(22, quota(21))
+        assertEquals(30, quota(29))
         // Inside a stretch between bosses it still only ever goes up.
         for (n in 2..29) if (n % 10 > 1) assertTrue(quota(n) > quota(n - 1), "level $n")
         // No level of the campaign asks for more than the last one before the first boss did, plus a bit.
-        assertTrue((1..29).maxOf { quota(it) } <= 32)
+        assertTrue((1..29).maxOf { quota(it) } <= 30)
         // The bosses' own health is not touched.
         assertEquals(listOf(20, 22, 24), listOf(10, 20, 30).map { LevelGen.bossLevel(it, Random(1)).quota })
         // Endless has no bosses to earn a break from: its waves only grow.

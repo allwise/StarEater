@@ -48,9 +48,12 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
 
     private fun play() {
         val k = current()
-        game.profile.lastSeed = k
-        game.profile.save()
-        game.go(IntroScreen(game, SeedKey.newRun(k, level = game.profile.startLevel)))
+        val p = game.profile
+        p.lastSeed = k
+        // Today's seed is the daily run, and that always starts from the top.
+        val run = if (k == SeedKey.dailyNow()) SeedKey.dailyRun().also { p.startedDaily(SeedKey.today()) } else SeedKey.newRun(k, level = p.startLevel)
+        p.save()
+        game.go(IntroScreen(game, run))
     }
 
     override fun back() = game.go(MenuScreen(game, more = true))
@@ -83,10 +86,10 @@ class SeedScreen(game: StarEaterGame) : Screen(game) {
             g.triangle(x - 9f, SLOT_Y - 6f, x + 9f, SLOT_Y - 6f, x, SLOT_Y - 17f, c)
         }
         g.rect(cx - 8f, SLOT_Y + SLOT_H / 2f - 2f, 16f, 4f, Pal.DIM)
-        if (current() == SeedKey.dailyNow()) g.text(g.tiny, "THIS IS TODAY'S SEED", cx, SLOT_Y + SLOT_H + 40f, Pal.GOLD, 1f, Align.center)
+        if (current() == SeedKey.dailyNow()) g.text(g.tiny, "THIS IS TODAY'S SEED  -  IT ALWAYS STARTS AT LEVEL 1", cx, SLOT_Y + SLOT_H + 40f, Pal.GOLD, 1f, Align.center)
 
         showFocus = onButtons
-        val from = game.profile.startLevel
+        val from = if (current() == SeedKey.dailyNow()) 1 else game.profile.startLevel
         playButton.label = if (from > 1) "PLAY FROM LV $from" else "PLAY THIS SEED"
         slots.update(dt)
         drawButtons()

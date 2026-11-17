@@ -322,7 +322,9 @@ class GravityRule : Rule() {
     override fun setup(w: World) {
         val n = w.spec.number
         val scrolling = w.spec.move == MoveKind.SCROLL
-        val count = if (scrolling) 1 + (if (n >= 8) 1 else 0) + (if (n >= 14) 1 else 0) else if (n >= 9) 2 else 1
+        val base = if (scrolling) 1 + (if (n >= 8) 1 else 0) + (if (n >= 14) 1 else 0) else if (n >= 9) 2 else 1
+        // Deep Space's field is four screens: give it suns enough to sling from one to the next.
+        val count = if (w.w * w.h > LevelSpec.FIELD_W * LevelSpec.FIELD_H) base + 2 else base
         // Never a whole sky of black holes: one at most, two once things have got properly late.
         var holesLeft = if (n >= 16) 2 else 1
         // The scroller's wells come round on a loop; spacing them evenly along it keeps them apart for good.
@@ -342,7 +344,7 @@ class GravityRule : Rule() {
             // Dwarfs and middling suns early on; the giants turn up from level 8.
             val stage = if (hole) Gravity.HOLE else 1 + w.rng.nextInt(min(3, 1 + n / 4))
             // A sun is a light: in a dark level it shows everything out to half the reach of its pull.
-            w.wells += Well(x, y, stage, (if (scrolling) 34f else 22f) * Gravity.factor(stage), if (hole) 0f else REACH / 2f)
+            w.wells += Well(x, y, stage, (if (scrolling) 34f else 22f) * Gravity.factor(stage) * SLING[stage], if (hole) 0f else REACH / 2f)
         }
     }
 
@@ -361,8 +363,12 @@ class GravityRule : Rule() {
             val d = hypot(dx, dy)
             if (d < REACH && d > 0.01f) {
                 val a = well.pull / max(d, 1.2f) * (1f - d / REACH)
+                val before = hypot(p.vx, p.vy)
                 p.vx += dx / d * a * dt
                 p.vy += dy / d * a * dt
+                // What a fall towards it adds may take you past your top speed - that is the sling -
+                // and what the climb away takes off comes out of that first. See [Player.fling].
+                p.fling = max(0f, p.fling + hypot(p.vx, p.vy) - before)
             }
             // A sun you can fly straight through. Past a black hole's horizon there is no coming back
             // (short of a Second Wind, which gets thrown clear).
@@ -392,6 +398,13 @@ class GravityRule : Rule() {
     companion object {
         /** How far out a well's pull is felt, in tiles. */
         const val REACH = 9f
+
+        /**
+         * How much harder the wells pull than they once did, by stage: black hole, dwarf, sun, giant.
+         * The small ones gained most - they were barely felt. The orbit level's sun is not a well and
+         * is not affected.
+         */
+        private val SLING = floatArrayOf(1f, 1.6f, 1.35f, 1.2f)
 
         /** How far off the top and bottom a scrolling well goes before it comes round again. */
         private const val MARGIN = 3f

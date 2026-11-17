@@ -96,6 +96,12 @@ object LevelGen {
             mods += chosen.id
             pool.removeAll { it.id in chosen.conflicts || chosen.id in it.conflicts }
         }
+        // Deep Space in a glide level often brings a few suns along: a big field to sling yourself
+        // across. (Glide is the one way of moving both rules work in, so left to chance alone the
+        // pair hardly ever met. The extra draw happens only on such levels, so no other changes.)
+        if (move == MoveKind.GLIDE && "deep" in mods && "gravity" !in mods && n >= 4 && mods.size < LevelSpec.MAX_RULES - 1) {
+            if (rng.nextFloat() < DEEP_GRAVITY) mods += "gravity"
+        }
 
         val available = Enemies.roster.filter { it.minLevel <= n }.toMutableList()
         val rosterSize = 1 + rng.nextInt(min(4, 1 + n / 2))
@@ -189,7 +195,9 @@ object LevelGen {
         s.quota = min(46, 8 + 2 * early + late - relief)
         s.starsOnField = when (s.move) {
             MoveKind.SCROLL -> 5 + min(3, n / 5)
-            MoveKind.ORBIT -> 4 + min(3, n / 4)
+            // The solar system is more than twice the screen, and the stars only ride the inner part
+            // of it: it needs more of them for a screenful to look like any other level's.
+            MoveKind.ORBIT -> 6 + min(4, n / 3)
             else -> 2 + min(3, n / 4)
         }
         // A solar system needs room: bigger than the screen, so the camera follows.
@@ -201,6 +209,12 @@ object LevelGen {
         s.enemySpeed = 2f + 4.6f * (1f - exp(-early / 10f)) + 0.035f * late
         s.iqBase = min(0.85f, 0.08f + 0.06f * early + 0.012f * late)
         s.scrollSpeed = min(4.5f, 1.8f + 0.15f * early + 0.05f * late)
+        if (s.move == MoveKind.ORBIT) {
+            // You coast in orbit and cannot stop or turn on a sixpence, and every enemy in that big
+            // field converges on you: a quarter fewer of them, arriving a little less often.
+            s.enemyMax = max(2, (s.enemyMax * 0.75f).toInt())
+            s.spawnInterval *= 1.2f
+        }
 
         s.starWeights[StarType.COMMON.ordinal] = 1f
         s.starWeights[StarType.GOLD.ordinal] = min(0.25f, 0.10f + 0.01f * k)
@@ -214,8 +228,11 @@ object LevelGen {
     /** How many levels the steep part of the difficulty curve lasts. */
     private const val STEEP = 8
 
+    /** How often a glide level with Deep Space gets Gravity Wells as well. */
+    private const val DEEP_GRAVITY = 0.6f
+
     /** How many stars come off the quota for each boss already behind you. */
-    const val BOSS_RELIEF = 6
+    const val BOSS_RELIEF = 7
 
     private fun <T> pick(rng: Random, items: List<T>, weight: (T) -> Float): T {
         var total = 0f

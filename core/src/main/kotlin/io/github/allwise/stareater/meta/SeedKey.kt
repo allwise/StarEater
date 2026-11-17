@@ -20,7 +20,13 @@ object SeedKey {
     /** The same key for everyone on a given day (days since 1970-01-01, UTC). */
     fun daily(epochDay: Long): String = encode((mix(epochDay * 0x9E3779B97F4A7C15uL.toLong() + 0x5EED) and MASK.toLong()).toInt())
 
-    fun dailyNow(nowMs: Long = System.currentTimeMillis()): String = daily(Math.floorDiv(nowMs, 86_400_000L))
+    fun dailyNow(nowMs: Long = System.currentTimeMillis()): String = daily(today(nowMs))
+
+    /** Today, as days since 1970-01-01 (UTC): when the daily seed turns over. */
+    fun today(nowMs: Long = System.currentTimeMillis()): Long = Math.floorDiv(nowMs, 86_400_000L)
+
+    /** A run on today's seed. It always starts from level 1, wherever new runs otherwise begin, so everyone's is the same run. */
+    fun dailyRun(nowMs: Long = System.currentTimeMillis()): RunState = newRun(dailyNow(nowMs), level = 1)
 
     fun isValid(key: String): Boolean = key.length == LENGTH && key.all { it in ALPHABET }
 

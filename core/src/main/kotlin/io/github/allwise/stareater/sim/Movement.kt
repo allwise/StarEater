@@ -190,6 +190,14 @@ abstract class ContinuousMovement(
     private val maxSpeed: Float,
 ) : Movement(kind) {
 
+    private companion object {
+        /** A well's fling can add at most this share of top speed. */
+        const val MAX_FLING = 0.6f
+
+        /** How fast the extra speed from a fling ebbs away, per second. */
+        const val FLING_FADE = 0.9f
+    }
+
     override fun updatePlayer(w: World, input: InputState, dt: Float) {
         val p = w.player
         var ix = input.moveX
@@ -205,10 +213,13 @@ abstract class ContinuousMovement(
         p.vx *= keep; p.vy *= keep
 
         var speed = hypot(p.vx, p.vy)
-        if (speed > top) {
-            p.vx *= top / speed; p.vy *= top / speed
-            speed = top
+        // A gravity well's fling lets you past top speed for a moment.
+        val cap = top + min(p.fling, top * MAX_FLING)
+        if (speed > cap) {
+            p.vx *= cap / speed; p.vy *= cap / speed
+            speed = cap
         }
+        p.fling = max(0f, min(p.fling, speed - top)) * exp(-FLING_FADE * dt)
         if (w.restless && p.started) {
             val floorSpeed = top * 0.6f
             if (speed < floorSpeed) {
@@ -283,7 +294,14 @@ class GlideMovement : ContinuousMovement(MoveKind.GLIDE, accel = 34f, drag = 1.8
 }
 
 /** Mode 3: a top-down scroller. Stars stream down from the top; you only wrap sideways. */
-class ScrollMovement : ContinuousMovement(MoveKind.SCROLL, accel = 70f, drag = 7f, maxSpeed = 9f) {
+/*
+ * The scroller used to have drag 7, against glide's 1.8. Both have about the same top speed, but
+ * with that much drag the ship only reached it with the stick pushed all the way out: half a push
+ * gave half the speed, where in glide half a push still ends up at full speed. A thumb on a phone
+ * rarely goes all the way, so sideways felt slow. Drag 3.6 keeps it snappy - it still stops in
+ * about a third of a second - but half a push now gets most of the way to top speed.
+ */
+class ScrollMovement : ContinuousMovement(MoveKind.SCROLL, accel = 70f, drag = 3.6f, maxSpeed = 9f) {
     override val enemySpeedFactor = 1.15f
     private var starTimer = 0f
 

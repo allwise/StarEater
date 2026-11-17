@@ -58,9 +58,10 @@ Run the tests:
 
 Menus work with the mouse, a finger, or just arrows + `ENTER`.
 
-The title screen has two pages. The front one is what there is to play - START (the campaign), each other
-mode once its boss is beaten (until then a line says which boss opens the next one), and the skill
-tree. MORE holds the rest: seeded runs, high scores, how to play and the options.
+The title screen has two pages. The front one is what there is to play - START (the campaign), the DAILY
+RUN, each other mode once its boss is beaten (until then a line says which boss opens the next one),
+and the skill tree. The daily run is today's seed, the same for everyone and always from level 1;
+its star sends out rings until you have started today's, then sits dim until tomorrow's. MORE holds the rest: seeded runs, high scores, how to play and the options.
 
 The three action buttons run down one edge of the field - top, middle, bottom - on the right, or on
 the left if the picture has been slid left to put the joystick pad on the right. In the campaign
@@ -97,7 +98,7 @@ it; tilt steering takes however the phone is held at that moment as level.
    press stops them all if you are in a hurry.
 3. Each level also rolls its **roster** of enemy types from the ones unlocked so far.
 4. Eat the level's **quota** of stars to clear it. The quota grows every level, then drops back by
-   six after each boss: the twists and the enemies keep piling on as before, and the star count
+   seven after each boss: the twists and the enemies keep piling on as before, and the star count
    gives a little back so that a late level is no longer than an early one.
 5. Every tenth level is a **boss**. The third one, on level 30, is the end of the campaign.
 6. Get eaten and the run ends. Your **stardust** is banked and can be spent on the skill tree.
@@ -125,8 +126,8 @@ light nothing, so a dark level with a black hole in it is as hard as it ever was
 |---|---|
 | **Classic** | The original. Everything lives on tiles; one tap, one step. Wraps on all four edges. |
 | **Glide** | Thrust and drift like a space shooter. Momentum carries you; wraps on all four edges. |
-| **Scroller** | A top-down scroller. Stars stream down from the top; you fly freely but only the sides wrap. |
-| **Orbit** | A solar system. A sun (or a black hole) sits in the middle and pulls on everything, stars ride their orbits, and you coast unless you burn. The field is bigger than the screen, so the camera follows you. From level 3. |
+| **Scroller** | A top-down scroller. Stars stream down from the top; you fly freely but only the sides wrap. It stops quicker than glide, but half a push on the stick still gets close to top speed. |
+| **Orbit** | A solar system. A sun (or a black hole) sits in the middle and pulls on everything, stars ride their orbits, and you coast unless you burn. The field is bigger than the screen, so the camera follows you; to make up for it there are more stars than on other levels and a quarter fewer enemies, arriving less often. From level 3. |
 
 ### Gravity
 
@@ -152,12 +153,14 @@ Things that pull come in two kinds, in orbit levels and in the Gravity Wells rul
 | Meteor Shower | A row or column flashes, then gets flattened. Rocks stun enemies too. | all |
 | Restless | No brakes: you can steer but never stop. | classic, glide |
 | Serpent | Every star grows your tail, and biting it hurts. It works on them too: an enemy that runs into the tail is stunned and bites it off there, so it is a wall that holds once and then needs to grow back. | classic, glide |
-| Gravity Wells | Suns that drag you off course and the odd black hole. One or two in glide; in the scroller up to three drift down the screen. | glide, scroller |
+| Gravity Wells | Suns that drag you off course and the odd black hole. One or two in glide (two more in a Deep Space field); in the scroller up to three drift down the screen. Use them as slings: falling past a sun can carry you up to 60% over your top speed for a moment. | glide, scroller |
 | Inversion | The edges are solid for you, and open for *them*. | all |
 | Deep Space | The field is four screens big and the camera follows you. Arrows on the rim point at off-screen stars. It still wraps. | classic, glide |
 | Lights Out | Pitch black apart from a small glow around you. Every star you eat lights up its patch for a few seconds. | all |
 
-Dark Nebula and Lights Out are never rolled together.
+Dark Nebula and Lights Out are never rolled together. Deep Space and Gravity Wells only both work
+in glide, so on their own they hardly ever met: a glide level with Deep Space now brings Gravity
+Wells along more often than not.
 
 ### Enemies
 
@@ -287,9 +290,9 @@ Every run has a seed key: six characters such as `STA-R22` (no `I`, `O`, `0` or 
 read out loud). The key decides the whole run: which rules each level rolls, which enemies, the
 wall layouts, where the boss is. The same key deals the same run to anyone.
 
-- **PLAY** starts a run on a fresh random key. The key is shown in the briefing, in the HUD and on
+- **START** starts a run on a fresh random key. The key is shown in the briefing, in the HUD and on
   the game-over screen, so a good run can be replayed or handed to a friend.
-- **SEEDED RUN** lets you type a key, take today's key (the same for everybody that day), or roll a
+- **SEEDED RUN** lets you type a key, take today's key (the same for everybody that day, and always from level 1), or roll a
   random one, and shows your best scores on it.
 - After a run, **SAME SEED** replays it.
 
@@ -405,6 +408,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,overdrive,echo` |
 | `items` | Up to three pocket items: `overdrive,stun,wipe,flare,shield,pull` |
 | `won=1` | With `screen=over`: show the campaign-complete ending |
+| `daily=done` | Pretend today's daily run has already been started |
 | `align` | Where the picture sits during a level: `-1` left, `0` centre, `1` right |
 | `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |
 | `window` | Window size, e.g. `1600x720`, to try screens that are not 16:9 |

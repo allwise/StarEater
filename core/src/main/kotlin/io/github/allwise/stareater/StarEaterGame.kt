@@ -56,6 +56,9 @@ class DevOptions(spec: String) {
     val bot: Boolean = map["bot"] == "1"
     val auto: Boolean = map["auto"] == "1"
 
+    /** Pretend today's daily run has already been started. */
+    val dailyDone: Boolean = map["daily"] == "done"
+
     /** With `screen=play`: open on the pause menu. */
     val paused: Boolean = map["paused"] == "1"
 
@@ -154,6 +157,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
     private fun startDev(d: DevOptions) {
         if (d.dust >= 0) profile.grantDust(d.dust)
         for (boss in 10..d.checkpoint step 10) profile.beatBoss(boss)
+        if (d.dailyDone) profile.startedDaily(io.github.allwise.stareater.meta.SeedKey.today())
         if (d.checkpoint > 0) {
             profile.store(0, "STAR22")
             profile.store(2, "MQQN99")

@@ -234,4 +234,28 @@ class MetaTest {
         store.put("savedLevels", "STAR22:7:,,MQQN99:14:A,,")
         assertEquals(listOf("STAR22", null, "MQQN99", null, null), Profile(store).saved.toList())
     }
+
+    /** The daily run: always from level 1, and the profile remembers which day it was last started. */
+    @Test
+    fun theDailyRunStartsAtLevelOneAndIsRememberedForTheDay() {
+        val p = Profile(MemoryStore())
+        p.beatBoss(10)
+        p.startLevel = 11
+        assertEquals(11, p.startLevel)
+        val noon = 20_000L * 86_400_000L + 43_200_000L
+        val run = SeedKey.dailyRun(noon)
+        assertEquals(1, run.level, "a daily run never starts from a checkpoint")
+        assertEquals(SeedKey.dailyNow(noon), run.key)
+        assertEquals(20_000L, SeedKey.today(noon))
+
+        val today = SeedKey.today(noon)
+        assertTrue(p.dailyWaiting(today))
+        p.startedDaily(today)
+        assertFalse(p.dailyWaiting(today))
+        assertTrue(p.dailyWaiting(today + 1), "and tomorrow there is a new one")
+        val reloaded = Profile(MemoryStore().also { p.copyInto(it) })
+        assertFalse(reloaded.dailyWaiting(today), "it survives a reload")
+        // A save from before the daily was tracked has simply never played one.
+        assertTrue(Profile(MemoryStore().also { it.put("stardust", "50") }).dailyWaiting(today))
+    }
 }
