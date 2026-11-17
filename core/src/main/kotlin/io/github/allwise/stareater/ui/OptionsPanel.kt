@@ -6,6 +6,7 @@ import io.github.allwise.stareater.StarEaterGame
 import io.github.allwise.stareater.audio.Sfx
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
+import io.github.allwise.stareater.input.Buzz
 import io.github.allwise.stareater.meta.Profile
 
 /**
@@ -21,8 +22,10 @@ class OptionsPanel(private val screen: Screen, private val game: StarEaterGame, 
     private val sens = ArrayList<Button>()
     private var tilt: Button? = null
     private var buzz: Button? = null
+    private lateinit var shake: Button
     private var rowTilt = 0f
     private var rowBuzz = 0f
+    private var rowShake = 0f
 
     /** Adds the panel's buttons to the screen. Call once, from the screen's `show`. */
     fun build() {
@@ -48,22 +51,25 @@ class OptionsPanel(private val screen: Screen, private val game: StarEaterGame, 
         }
 
         // The last two rows only exist where the hardware does.
-        var y = ROW_SCREEN - 76f
+        var y = ROW_SCREEN - 66f
         if (game.canTilt) {
             rowTilt = y
             tilt = screen.addButton(CONTROLS, y - 20f, 124f, 40f, "") { p.tilt = !p.tilt }
             for ((i, name) in listOf("GENTLE", "NORMAL", "TWITCHY").withIndex()) {
                 sens += screen.addButton(CONTROLS + 132f + i * 88f, y - 20f, 84f, 40f, name) { p.tiltSens = i }.also { it.small = true }
             }
-            y -= 62f
+            y -= ROW_STEP
         }
         if (game.canBuzz) {
             rowBuzz = y
             buzz = screen.addButton(CONTROLS, y - 20f, 124f, 40f, "") {
                 p.haptics = !p.haptics
-                game.buzz()
+                game.buzz(Buzz.CLEAR)
             }
+            y -= ROW_STEP
         }
+        rowShake = y
+        shake = screen.addButton(CONTROLS, y - 20f, 124f, 40f, "") { p.shake = !p.shake }
     }
 
     /** A minus and a plus button either side of a ten-step bar. */
@@ -95,6 +101,8 @@ class OptionsPanel(private val screen: Screen, private val game: StarEaterGame, 
             label(rowBuzz, "VIBRATION", "")
             it.label = if (p.haptics) "ON" else "OFF"
         }
+        label(rowShake, "SCREEN SHAKE", "the picture jolts on big hits")
+        shake.label = if (p.shake) "ON" else "OFF"
     }
 
     private fun label(y: Float, name: String, note: String) {
@@ -135,8 +143,9 @@ class OptionsPanel(private val screen: Screen, private val game: StarEaterGame, 
     private companion object {
         const val LABELS = 120f
         const val CONTROLS = 430f
-        const val ROW_MUSIC = 420f
-        const val ROW_SOUND = 350f
-        const val ROW_SCREEN = 274f
+        const val ROW_MUSIC = 436f
+        const val ROW_SOUND = 374f
+        const val ROW_SCREEN = 306f
+        const val ROW_STEP = 60f
     }
 }

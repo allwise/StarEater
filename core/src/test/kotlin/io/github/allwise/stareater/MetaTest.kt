@@ -258,4 +258,14 @@ class MetaTest {
         // A save from before the daily was tracked has simply never played one.
         assertTrue(Profile(MemoryStore().also { it.put("stardust", "50") }).dailyWaiting(today))
     }
+
+    /** Screen shake is off until asked for, and remembered once it is. */
+    @Test
+    fun screenShakeIsOffByDefault() {
+        val p = Profile(MemoryStore())
+        assertFalse(p.shake)
+        assertTrue(p.haptics, "vibration, on the other hand, is on")
+        p.shake = true
+        assertTrue(Profile(MemoryStore().also { p.copyInto(it) }).shake)
+    }
 }

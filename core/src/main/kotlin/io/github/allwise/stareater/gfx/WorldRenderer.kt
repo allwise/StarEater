@@ -100,6 +100,9 @@ class WorldRenderer(private val g: Gfx) {
     private var follow = false
     private var wrapsY = true
 
+    /** Whether the picture may shake at all. The events still set [shake]; this decides if it shows. */
+    var shakeOn = false
+
     /** Screen shake offset this frame. */
     private var ox = 0f
     private var oy = 0f
@@ -390,8 +393,13 @@ class WorldRenderer(private val g: Gfx) {
             ring(w.player.x, w.player.y, 2.4f, 0.45f, Pal.CYAN)
         }
         arrive += dt
-        ox = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
-        oy = if (shake > 0f) (rnd.nextFloat() - 0.5f) * shake else 0f
+        // A jolt rather than a buzz: two out-of-step wobbles that die away, not fresh noise every frame.
+        if (shakeOn && shake > 0f) {
+            ox = MathUtils.sin(time * 47f) * shake * 0.5f
+            oy = MathUtils.sin(time * 39f + 1.7f) * shake * 0.45f
+        } else {
+            ox = 0f; oy = 0f
+        }
         camera(w, dt)
 
         background(w, dt)

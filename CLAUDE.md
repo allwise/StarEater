@@ -112,12 +112,15 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
   is the one exception).
 - Saved slots keep a seed key and nothing else.
 - Cosmetics, when they come, must each be switchable off.
+- Screen shake is a setting, off by default (the owner does not like it; some players do).
+  Vibration is on by default; every feel is a named `Buzz` in `input/Haptics.kt`.
+- With tilt steering on, touch only presses buttons: no floating stick, no tap-to-step, no pad.
 
 ## Status
 
-*As of 2026-11-17.*
+*As of 2026-11-18.*
 
-**Playtested (2026-11-15): "a lot of good feel".** Two rounds of small things came back and are
+**Playtested (2026-11-15): "a lot of good feel". Tilt and sound: "works well as is" (2026-11-18).** Two rounds of small things came back and are
 built and pushed, waiting on the next playtest:
 
 - Menus centred on the whole screen instead of following the left/right setting; the two-page
@@ -130,6 +133,8 @@ built and pushed, waiting on the next playtest:
 - A pause button in the status strip, and the pause menu being the options (tilt re-centres on
   RESUME - untested on a device, as is everything about tilt).
 - The W swims in strokes (pace only; drawn from stills, never watched moving on a phone).
+- Round four (2026-11-18): vibration on game events (stars, crashes and more - none of it felt
+  yet), screen shake made switchable and off by default, touch steering off while tilting.
 - Round three (2026-11-17): the scroller's sideways speed with a part-pushed stick; the daily run
   on the front page, always from level 1; stronger wells that can fling you; orbit levels with more
   stars and fewer enemies; Deep Space and Gravity Wells paired up.

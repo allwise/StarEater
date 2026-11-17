@@ -12,6 +12,8 @@ import com.badlogic.gdx.utils.ScreenUtils
 import io.github.allwise.stareater.audio.Audio
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
+import io.github.allwise.stareater.input.Buzz
+import io.github.allwise.stareater.input.Haptics
 import io.github.allwise.stareater.meta.KeyValueStore
 import io.github.allwise.stareater.meta.MemoryStore
 import io.github.allwise.stareater.meta.Profile
@@ -130,15 +132,19 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         dev?.phone == true || Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback) || Gdx.input.isPeripheralAvailable(Input.Peripheral.Vibrator)
     }
 
-    /** A tiny tap through the vibration motor, where there is one and the player has not turned it off. */
-    fun buzz() {
-        if (!profile.haptics || !canBuzz) return
+    private val haptics = Haptics { ms, strength ->
         try {
-            if (Gdx.input.isPeripheralAvailable(Input.Peripheral.HapticFeedback)) Gdx.input.vibrate(Input.VibrationType.LIGHT)
-            else Gdx.input.vibrate(12)
+            // Where the phone cannot vary the strength, it falls back to its one setting.
+            Gdx.input.vibrate(ms, strength, true)
         } catch (e: Exception) {
             // No permission, no motor, an odd device: the game is fine without it.
         }
+    }
+
+    /** A feel through the vibration motor, where there is one and the player has not turned it off. */
+    fun buzz(b: Buzz = Buzz.TAP) {
+        if (!profile.haptics || !canBuzz) return
+        haptics.play(b)
     }
 
     override fun create() {
@@ -235,6 +241,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         // Dev runs step at a fixed rate so bot runs and screenshots are repeatable.
         val dt = if (dev != null) 1f / 60f else minOf(Gdx.graphics.deltaTime, 1f / 30f)
         audio.update(dt)
+        haptics.update(dt)
         // Beside the field the bars are black, so its edges - which wrap - stay plain to see.
         if (screen is PlayScreen) ScreenUtils.clear(0f, 0f, 0f, 1f) else ScreenUtils.clear(Pal.BG)
         gfx.begin()

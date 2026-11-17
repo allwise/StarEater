@@ -15,6 +15,7 @@ import io.github.allwise.stareater.sim.StarType
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
+import io.github.allwise.stareater.input.Buzz
 import io.github.allwise.stareater.input.Controls
 import io.github.allwise.stareater.sim.Bot
 import io.github.allwise.stareater.sim.LevelSpec
@@ -123,6 +124,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
             sounds()
             renderer.consume(world)
         }
+        renderer.shakeOn = game.profile.shake
         renderer.draw(world, if (paused) 0f else dt)
         renderer.hud(world, game.keyHints)
         if (world.phase == World.Phase.PLAYING && !paused) pauseButton()
@@ -175,14 +177,25 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 // The pickup blip climbs a scale with the combo.
                 audio.play(Sfx.EAT, Audio.comboPitch(e.combo))
                 if (e.type == StarType.NOVA) audio.play(Sfx.BLAST) else if (e.type.value >= 3) audio.play(Sfx.EAT_RARE)
+                game.buzz(if (e.type == StarType.NOVA) Buzz.NOVA else if (e.type.value >= 3) Buzz.RARE else Buzz.STAR)
             }
-            is Fx.ShieldHit -> audio.play(Sfx.SHIELD)
-            is Fx.Revive -> audio.play(Sfx.REVIVE)
+            is Fx.ShieldHit -> {
+                audio.play(Sfx.SHIELD)
+                game.buzz(Buzz.SHIELD)
+            }
+            is Fx.Revive -> {
+                audio.play(Sfx.REVIVE)
+                game.buzz(Buzz.REVIVE)
+            }
             is Fx.Death -> {
                 audio.play(Sfx.DEATH)
                 audio.tune(null)
+                game.buzz(Buzz.CRASH)
             }
-            is Fx.Overdrive -> audio.play(Sfx.DASH, 0.8f)
+            is Fx.Overdrive -> {
+                audio.play(Sfx.DASH, 0.8f)
+                game.buzz(Buzz.SURGE)
+            }
             is Fx.ItemUsed -> {
                 when (e.item) {
                     Item.STUN -> {} // the blast speaks for itself
@@ -192,23 +205,30 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                     Item.PULL -> audio.play(Sfx.EAT_RARE, 0.7f)
                     Item.OVERDRIVE -> {}
                 }
-                game.buzz()
+                game.buzz(Buzz.ITEM)
             }
             is Fx.Wave -> {
                 audio.play(Sfx.CLEAR, 1.15f, 0.7f)
                 // Each wave the tune runs a little faster.
                 audio.tempo(tempoFor(e.number))
             }
-            is Fx.Nova -> audio.play(Sfx.BLAST, 1.2f, 0.7f)
+            is Fx.Nova -> {
+                audio.play(Sfx.BLAST, 1.2f, 0.7f)
+                game.buzz(Buzz.NOVA)
+            }
             is Fx.Wrap -> audio.play(Sfx.WRAP)
             is Fx.EnemySpawn -> audio.play(Sfx.SPAWN)
             is Fx.Stun -> audio.play(Sfx.STUN)
             is Fx.Alert -> audio.play(Sfx.ALERT)
             is Fx.MeteorWarn -> audio.play(Sfx.WARN)
             is Fx.TimeUp -> audio.play(Sfx.UI_NO)
-            is Fx.BossHit -> audio.play(Sfx.BOSS_HIT)
+            is Fx.BossHit -> {
+                audio.play(Sfx.BOSS_HIT)
+                game.buzz(Buzz.BOSS_HIT)
+            }
             is Fx.BossDead -> {
                 audio.play(Sfx.BOSS_DEAD)
+                game.buzz(Buzz.BOSS_DEAD)
                 // A boss beaten for the first time opens something: a mode, and a place to start from.
                 val next = game.profile.beatBoss(spec.number)
                 if (next > 0) {
@@ -220,20 +240,25 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                     }
                 }
             }
-            is Fx.Cleared -> audio.play(Sfx.CLEAR)
+            is Fx.Cleared -> {
+                audio.play(Sfx.CLEAR)
+                // A boss level's own rumble says it better.
+                if (spec.boss == null) game.buzz(Buzz.CLEAR)
+            }
             is Fx.Powered -> {
                 audio.play(Sfx.POWER_UP)
-                game.buzz()
+                game.buzz(Buzz.POWER)
             }
             is Fx.PowerLost -> audio.play(Sfx.POWER_DOWN)
             is Fx.EdgeWarn -> klaxon = 0f
             is Fx.EdgeSeal -> {
                 audio.play(Sfx.SEAL)
-                game.buzz()
+                game.buzz(Buzz.SEAL)
             }
             is Fx.EdgeOpen -> audio.play(Sfx.UNSEAL)
             // The stun that goes with a bitten tail has already made its noise.
-            is Fx.StarLost, is Fx.EnemyGone, is Fx.TailCut -> {}
+            is Fx.TailCut -> game.buzz(Buzz.SNAG)
+            is Fx.StarLost, is Fx.EnemyGone -> {}
         }
         // The edge-block klaxon keeps honking for as long as the warning lasts.
         if (world.sealWarn > 0f) {
@@ -243,7 +268,11 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
         // The countdown clock ticks out its last five seconds.
         if (world.timeLeft in 0f..5f) {
             val second = world.timeLeft.toInt()
-            if (second != lastTick) { lastTick = second; audio.play(Sfx.TICK) }
+            if (second != lastTick) {
+                lastTick = second
+                audio.play(Sfx.TICK)
+                game.buzz(Buzz.TICK)
+            }
         }
     }
 
@@ -254,6 +283,8 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
      */
     override fun overlay() {
         if (paused) return
+        // Steering by tilt: no stick, so no pad either.
+        if (controls.tilting) return
         // With the picture slid to one side, the bar left over is the joystick: say so.
         val align = game.gfx.align
         if (align < 0) pad(Gfx.W, game.gfx.spareRight) else if (align > 0) pad(-game.gfx.spareLeft, game.gfx.spareLeft)

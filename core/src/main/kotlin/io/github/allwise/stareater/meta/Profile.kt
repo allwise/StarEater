@@ -63,6 +63,9 @@ class Profile(private val store: KeyValueStore) {
     /** Little taps through the vibration motor. */
     var haptics = true
 
+    /** The picture jolts when something big happens. Off unless asked for: not everyone likes it. */
+    var shake = false
+
     /** The highest boss level beaten so far (10, 20, ...). Beating one opens a start on the level after it. */
     var checkpoint = 0
         private set
@@ -97,6 +100,7 @@ class Profile(private val store: KeyValueStore) {
         tilt = store.get(K_TILT) == "1"
         tiltSens = store.get(K_TILT_SENS)?.toIntOrNull() ?: 1
         haptics = store.get(K_HAPTICS) != "0"
+        shake = store.get(K_SHAKE) == "1"
         checkpoint = (store.get(K_CHECKPOINT)?.toIntOrNull() ?: 0).coerceAtLeast(0)
         // A save from before bosses were recorded: having reached level 11 means the first boss fell, and so on.
         checkpoint = maxOf(checkpoint, minOf(GameMode.CAMPAIGN_LENGTH, (bestLevel - 1).coerceAtLeast(0) / CHECKPOINT_EVERY * CHECKPOINT_EVERY))
@@ -260,7 +264,7 @@ class Profile(private val store: KeyValueStore) {
             it.stardust = stardust; it.totalRuns = totalRuns; it.bestLevel = bestLevel
             it.initials = initials; it.lastSeed = lastSeed; it.musicOn = musicOn; it.sfxOn = sfxOn
             it.musicVol = musicVol; it.sfxVol = sfxVol; it.screenAlign = screenAlign
-            it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics
+            it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics; it.shake = shake
             it.checkpoint = checkpoint; it.startLevel = startLevel; it.dailyDay = dailyDay
             saved.copyInto(it.saved)
             it.owned += owned; it.scores += scores
@@ -283,6 +287,7 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_TILT, if (tilt) "1" else "0")
         store.put(K_TILT_SENS, tiltSens.toString())
         store.put(K_HAPTICS, if (haptics) "1" else "0")
+        store.put(K_SHAKE, if (shake) "1" else "0")
         store.put(K_CHECKPOINT, checkpoint.toString())
         store.put(K_START, startLevel.toString())
         store.put(K_SAVED, saved.joinToString(",") { it ?: "" })
@@ -308,6 +313,7 @@ class Profile(private val store: KeyValueStore) {
         private const val K_TILT = "tilt"
         private const val K_TILT_SENS = "tiltSens"
         private const val K_HAPTICS = "haptics"
+        private const val K_SHAKE = "shake"
         private const val KEEP = 120
         private const val K_SEED = "lastSeed"
         private const val K_DAILY = "dailyDay"

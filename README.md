@@ -83,8 +83,16 @@ it; tilt steering takes however the phone is held at that moment as level.
   picture will go.
 - **Tilt steering** (phones and tablets): lean the device the way you want to go. However it is held
   when a level starts counts as level, and it re-centres after every pause. Three sensitivities. In
-  classic levels a firm lean is a held direction.
-- **Vibration** (where there is a motor): the small taps on the initials wheels and the slot reels.
+  classic levels a firm lean is a held direction. While tilt steers, touch is for the buttons only:
+  no floating stick and no tap-to-step, so a hand resting on the glass cannot fight the lean.
+- **Vibration** (where there is a motor), on unless turned off. A faint tap for each star (a firmer
+  one for the rare ones, a thump for a Nova), a hard double thud when you are eaten, a firm knock
+  when a shield takes a hit, two taps for a level cleared, a rolling rumble for a boss going down,
+  and smaller ones for Overdrive, items, pick-ups, the Warden sealing the edges, an enemy biting
+  through your Serpent tail and the Countdown's last five seconds - plus the taps on the slot reels
+  and the initials wheels. Star taps on a big combo are thinned out so they never run into a drone.
+- **Screen shake**, off unless turned on: the picture jolts on big hits - a shield going, being
+  eaten, a boss falling, the edges slamming shut.
 
 ## How a run works
 

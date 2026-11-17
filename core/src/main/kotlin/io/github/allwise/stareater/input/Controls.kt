@@ -17,7 +17,8 @@ import kotlin.math.sqrt
  *
  * Keyboard: arrows / WASD to move; SPACE, E and C (or 1, 2, 3) are the three action buttons.
  * Touch: put a thumb down anywhere and drag - a floating stick. In the classic mode a quick tap
- * (no drag) steps once towards the tap. The two ability dials are tappable.
+ * (no drag) steps once towards the tap. The action buttons are tappable. While tilt is steering,
+ * touch is for the buttons only.
  * Tilt: lean the device the way you want to go. However it is being held when the level starts
  * counts as level, so it works slouched on a sofa as well as sat at a table.
  */
@@ -88,6 +89,9 @@ class Controls {
                 if (slotOn[i] || slotOn.any { it }) return
             }
         }
+        // Steering by tilt: a thumb on the glass is for the buttons only, never a stick or a step,
+        // so resting a hand on the screen cannot fight the lean.
+        if (tiltOn) return
         if (stickPointer >= 0) return
         stickPointer = pointer
         stickOn = true
@@ -140,6 +144,9 @@ class Controls {
      * @param sensitivity 1 is normal; higher needs less of a lean
      */
     fun tilt(ax: Float, ay: Float, az: Float, rotation: Int, sensitivity: Float, dt: Float) {
+        // A stick that was already down when tilt took over lets go.
+        if (!tiltOn && stickPointer >= 0) { stickPointer = -1; stickOn = false; stickDir = null }
+        tiltOn = true
         val g = sqrt(ax * ax + ay * ay + az * az)
         if (g < 2f) return // in free fall, or the sensor has nothing to say yet
         // The same reading, along the screen's left and up instead of the device's.
@@ -154,7 +161,6 @@ class Controls {
         // Roll: how far the right-hand side has dropped. Pitch: 0 flat on a table, 90 degrees upright.
         val roll = asin((left / g).coerceIn(-1f, 1f))
         val pitch = atan2(up, az)
-        tiltOn = true
         if (calibration < CALIBRATION_FRAMES) {
             // Average the first few readings: that is "level" for this level.
             neutralPitch = if (calibration == 0) pitch else neutralPitch + (pitch - neutralPitch) / (calibration + 1)
@@ -179,6 +185,9 @@ class Controls {
             tiltDir = null
         }
     }
+
+    /** True while tilt is doing the steering (and the touch stick is off). */
+    val tilting: Boolean get() = tiltOn
 
     /** Tilt steering is off (or there is no sensor). */
     fun noTilt() {

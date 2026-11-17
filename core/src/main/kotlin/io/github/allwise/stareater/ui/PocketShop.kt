@@ -64,7 +64,7 @@ class PocketShop(game: StarEaterGame, private val run: RunState, private val pit
                 run.pockets[free] = item
                 paid[free] = cost
                 game.audio.play(Sfx.UI_BUY)
-                game.buzz()
+                game.buzz(io.github.allwise.stareater.input.Buzz.POWER)
                 return
             }
         }

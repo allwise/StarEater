@@ -103,4 +103,60 @@ class InputTest {
         feed(c, 40f, 20f, frames = 5)
         assertEquals(0f, c.state.moveX, 0.001f)
     }
+
+    /** While tilt steers, a thumb on the glass presses buttons and nothing else: no stick, no step. */
+    @Test
+    fun withTiltOnTouchIsForTheButtonsOnly() {
+        val c = Controls()
+        c.playerX = 480f; c.playerY = 240f
+        c.slotOn[0] = true
+        feed(c, 30f, 0f)
+        assertTrue(c.tilting)
+        // A drag in the middle of the field: no stick appears and no step is taken.
+        c.state.clearEdges()
+        c.touchDown(200f, 200f, 0)
+        c.touchDragged(300f, 200f, 0)
+        c.touchUp(300f, 200f, 0)
+        assertEquals(false, c.stickOn)
+        assertTrue(c.state.taps.isEmpty(), "no step from a tap while tilting")
+        // The top action button still works.
+        c.touchDown(io.github.allwise.stareater.gfx.WorldRenderer.buttonX(false), io.github.allwise.stareater.gfx.WorldRenderer.BUTTON_Y[0], 1)
+        assertTrue(c.state.slots[0])
+
+        // Tilt off again: the stick is back.
+        c.noTilt()
+        c.touchDown(200f, 200f, 0)
+        c.touchDragged(300f, 200f, 0)
+        assertTrue(c.stickOn)
+    }
+
+    /** The vibration patterns: played out pulse by pulse, the big ones winning over the small. */
+    @Test
+    fun hapticsPlayPatternsAndKeepTheBigOnesBig() {
+        val out = ArrayList<Pair<Int, Int>>()
+        val h = io.github.allwise.stareater.input.Haptics { ms, s -> out += ms to s }
+        h.play(io.github.allwise.stareater.input.Buzz.CRASH)
+        assertEquals(1, out.size, "the first pulse goes straight away")
+        // A star eaten in the moment you die does not cut the crash short.
+        h.play(io.github.allwise.stareater.input.Buzz.STAR)
+        assertEquals(1, out.size)
+        repeat(30) { h.update(1f / 60f) }
+        assertEquals(2, out.size, "the crash's second pulse follows after its rest")
+        assertTrue(out[0].first > out[1].first && out[0].second > out[1].second)
+
+        // A burst of star taps is thinned out rather than run together.
+        out.clear()
+        repeat(10) {
+            h.play(io.github.allwise.stareater.input.Buzz.STAR)
+            h.update(1f / 60f)
+        }
+        assertTrue(out.size in 2..4, "ten stars in a sixth of a second should be a few taps, got ${out.size}")
+
+        // Every feel is short and within what the motor can take.
+        for (b in io.github.allwise.stareater.input.Buzz.values()) {
+            val total = b.pattern.sumOf { it.ms + it.restMs }
+            assertTrue(total <= 600, "$b runs $total ms")
+            for (p in b.pattern) assertTrue(p.strength in 1..255 && p.ms in 1..200, "$b")
+        }
+    }
 }

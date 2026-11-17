@@ -124,6 +124,7 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
         bot.drive(demo, input)
         demo.update(dt, input)
         renderer.consume(demo)
+        renderer.shakeOn = game.profile.shake
         renderer.draw(demo, dt)
         if (demo.phase != World.Phase.PLAYING && demo.phaseTime > 1.6f) demo = newDemo()
         g.rect(0f, 0f, Gfx.W, Gfx.H, Pal.BG, 0.72f)
