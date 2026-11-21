@@ -156,6 +156,9 @@ built and pushed, waiting on the next playtest:
 - A pause button in the status strip, and the pause menu being the options (tilt re-centres on
   RESUME - untested on a device, as is everything about tilt).
 - The W swims in strokes (pace only; drawn from stills, never watched moving on a phone).
+- New icon (2026-11-21), picked from several drafts: the same E, o and star as a triangle chase with
+  speed streaks (E bottom left after the o at the top, the o after the star at the right), plus a few
+  more background stars. Rendered into every launcher and window icon by tools/make_icons.cjs.
 - Round four (2026-11-18): vibration on game events (stars, crashes and more - none of it felt
   yet), screen shake made switchable and off by default, touch steering off while tilting.
 - Round three (2026-11-17): the scroller's sideways speed with a part-pushed stick; the daily run
