@@ -7,6 +7,14 @@ plugins {
 
 val gdxVersion: String by project
 
+// The upload key. It lives outside git: either in keystore.properties at the project root
+// (storeFile, storePassword, keyAlias, keyPassword) or in the STAREATER_* environment variables.
+// Without either, a release build is simply left unsigned, which is what CI wants.
+val keystoreProps = java.util.Properties().apply {
+    rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
+}
+fun uploadSecret(name: String, env: String): String? = keystoreProps.getProperty(name) ?: System.getenv(env)
+
 // libGDX ships its native code as jars; these get unpacked into libs/<abi>/ before packaging.
 val natives: Configuration by configurations.creating
 
@@ -17,8 +25,11 @@ android {
     defaultConfig {
         applicationId = "io.github.allwise.stareater"
         minSdk = 24
-        targetSdk = 35
-        versionCode = 1
+        // Play wants new apps and updates on a recent target. 36 turns on the predictive back
+        // gesture, which would swallow the back button the game catches: see the manifest.
+        targetSdk = 36
+        // Play rejects an upload whose versionCode it has seen before: raise it in gradle.properties.
+        versionCode = (project.findProperty("appVersionCode") as String).toInt()
         versionName = project.version.toString()
     }
 
@@ -32,9 +43,24 @@ android {
         targetCompatibility = JavaVersion.VERSION_11
     }
 
+    signingConfigs {
+        val store = uploadSecret("storeFile", "STAREATER_KEYSTORE")
+        if (store != null) {
+            create("release") {
+                storeFile = rootProject.file(store)
+                storePassword = uploadSecret("storePassword", "STAREATER_KEYSTORE_PASSWORD")
+                keyAlias = uploadSecret("keyAlias", "STAREATER_KEY_ALIAS")
+                keyPassword = uploadSecret("keyPassword", "STAREATER_KEY_PASSWORD")
+            }
+        }
+    }
+
     buildTypes {
         release {
+            // Left off on purpose: libGDX reaches for things by reflection, and a shrinker that
+            // has not been tested against a real phone is a way to ship a game that will not start.
             isMinifyEnabled = false
+            signingConfig = signingConfigs.findByName("release")
         }
     }
 }

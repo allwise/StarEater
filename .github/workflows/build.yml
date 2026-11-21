@@ -19,7 +19,21 @@ jobs:
 
       # The runner image ships an Android SDK (ANDROID_HOME), so the android module is included here.
       - name: Test and build
-        run: ./gradlew core:test lwjgl3:dist android:assembleDebug --stacktrace
+        run: ./gradlew core:test lwjgl3:dist android:assembleDebug android:bundleRelease --stacktrace
+
+      # Newer phones use 16 KB memory pages, and Play wants 64-bit native code to be ready for them.
+      # This only reports (as a warning on the run): the libraries are libGDX's, not ours.
+      - name: Native library alignment
+        run: |
+          for f in android/libs/arm64-v8a/*.so android/libs/x86_64/*.so; do
+            for a in $(readelf -lW "$f" | awk '/LOAD/ {print $NF}'); do
+              if [ $((a)) -lt 16384 ]; then
+                echo "::warning::$f has a segment aligned to $((a)) bytes, not 16384"
+                break
+              fi
+            done
+          done
+          echo "checked $(ls android/libs/arm64-v8a/*.so android/libs/x86_64/*.so | wc -l) libraries"
 
       - name: Desktop jar
         uses: actions/upload-artifact@v4

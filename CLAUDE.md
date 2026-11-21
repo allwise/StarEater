@@ -32,6 +32,23 @@ game plays to a file: set `ALSOFT_DRIVERS=wave` and point `ALSOFT_CONF` at a con
 Android cannot be built here without an SDK. `.github/workflows/build.yml` builds the tests, the
 desktop jar and the debug APK on every push: after pushing, check that run.
 
+## Releasing to Google Play
+
+- Build the bundle Play wants with `./gradlew android:bundleRelease`; it lands in
+  `android/build/outputs/bundle/release/`. It is signed with the *upload key* if
+  `keystore.properties` (storeFile, storePassword, keyAlias, keyPassword) exists at the project root
+  or the `STAREATER_KEYSTORE`, `_KEYSTORE_PASSWORD`, `STAREATER_KEY_ALIAS`, `_KEY_PASSWORD`
+  variables are set; otherwise it comes out unsigned (that is what CI builds). None of it is in git.
+- Google holds the app signing key (Play App Signing); we only own the upload key. Make it once:
+  `keytool -genkeypair -v -keystore upload.jks -alias upload -keyalg RSA -keysize 4096 -validity 10000`
+  and keep a copy in a password manager.
+- Raise `appVersionCode` in `gradle.properties` for every upload; Play refuses a repeat.
+- The package name `io.github.allwise.stareater` is permanent once the app exists in the Console.
+- Free vs paid cannot be changed later (free stays free), hence the plan: a free app with a one-time
+  in-app purchase that unlocks everything past level 10 (agreed, not built yet).
+- targetSdk 36 turns on predictive back; the manifest opts out so the back button still reaches the
+  game. Check pause-on-back on a phone after any targetSdk change.
+
 ## How the code is laid out
 
 - `sim/` is the game itself and must stay pure Kotlin: no libGDX, no files, no clock. It takes an
@@ -118,7 +135,13 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 
 ## Status
 
-*As of 2026-11-18.*
+**Publishing:** the owner is setting up a Norwegian sole proprietorship (ENK) first; the Play account
+is personal for now (so Play's 12-testers-for-14-days closed test applies before production). Release
+signing, the AAB build and a 16 KB alignment check are in place and unverified on a real upload.
+Still to build: the unlock purchase (Play Billing) with the level-10 demo cap, and Play Games
+leaderboards, both behind a `Platform`-style interface with a desktop no-op.
+
+*As of 2026-11-21.*
 
 **Playtested (2026-11-15): "a lot of good feel". Tilt and sound: "works well as is" (2026-11-18).** Two rounds of small things came back and are
 built and pushed, waiting on the next playtest:
