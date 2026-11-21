@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.util.Properties
 
 plugins {
     id("com.android.application")
@@ -10,7 +11,7 @@ val gdxVersion: String by project
 // The upload key. It lives outside git: either in keystore.properties at the project root
 // (storeFile, storePassword, keyAlias, keyPassword) or in the STAREATER_* environment variables.
 // Without either, a release build is simply left unsigned, which is what CI wants.
-val keystoreProps = java.util.Properties().apply {
+val keystoreProps = Properties().apply {
     rootProject.file("keystore.properties").takeIf { it.exists() }?.inputStream()?.use { load(it) }
 }
 fun uploadSecret(name: String, env: String): String? = keystoreProps.getProperty(name) ?: System.getenv(env)
