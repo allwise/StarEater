@@ -10,6 +10,7 @@ import io.github.allwise.stareater.meta.SeedKey
 import io.github.allwise.stareater.gfx.Gfx
 import io.github.allwise.stareater.gfx.Pal
 import io.github.allwise.stareater.gfx.WorldRenderer
+import io.github.allwise.stareater.meta.Profile
 import io.github.allwise.stareater.meta.Skill
 import io.github.allwise.stareater.sim.Arcade
 import io.github.allwise.stareater.sim.Bot
@@ -93,9 +94,11 @@ class MenuScreen(game: StarEaterGame, private var more: Boolean = false) : Scree
         front += button(x, next(), w, 37f, "SKILL TREE") { game.go(SkillScreen(game)) }
         front += button(x, next(), w, 37f, "MORE") { turn(true) }
         modes.firstOrNull { !p.unlocked(it) }?.let { hint = "BEAT BOSS ${it.ordinal} TO OPEN ${it.title}" }
+        if (p.demo && p.checkpoint >= Profile.DEMO_LAST_LEVEL) hint = "THE FULL GAME: LEVELS 11-30, ARCADE FLOW AND ENDLESS  -  SEE MORE"
         hintY = TOP - rows * PITCH + 26f
 
         rows = 0
+        if (p.demo) extras += button(x, next(), w, 37f, "UNLOCK FULL GAME") { game.go(UnlockScreen(game)) }.also { it.accent = Pal.GOLD }
         extras += button(x, next(), w, 37f, "SEEDED RUN") { game.go(SeedScreen(game)) }
         extras += button(x, next(), w, 37f, "HIGH SCORES") { game.go(ScoresScreen(game)) }
         extras += button(x, next(), w, 37f, "HOW TO PLAY") { game.go(HelpScreen(game)) }

@@ -70,9 +70,19 @@ class Profile(private val store: KeyValueStore) {
     var checkpoint = 0
         private set
 
-    /** Where new runs begin: level 1, or the level after any boss already beaten. */
+    /** Where new runs begin: level 1, or the level after any boss already beaten (and open in the demo). */
     var startLevel = 1
+        get() = if (field in startLevels()) field else 1
         set(v) { field = if (v in startLevels()) v else 1 }
+
+    /** True once the full game has been bought (as the store last said; kept for playing offline). */
+    var fullGame = false
+
+    /** Set at start-up where there is a store: only then is there a demo at all. Not saved. */
+    var storeSells = false
+
+    /** Playing the free part only: campaign levels 1 to [DEMO_LAST_LEVEL] and Arcade Matrix. */
+    val demo: Boolean get() = storeSells && !fullGame
 
     /**
      * Five seed keys kept for coming back to, in slots that work like the preset buttons on a car
@@ -100,6 +110,7 @@ class Profile(private val store: KeyValueStore) {
         tilt = store.get(K_TILT) == "1"
         tiltSens = store.get(K_TILT_SENS)?.toIntOrNull() ?: 1
         haptics = store.get(K_HAPTICS) != "0"
+        fullGame = store.get(K_FULL) == "1"
         shake = store.get(K_SHAKE) == "1"
         checkpoint = (store.get(K_CHECKPOINT)?.toIntOrNull() ?: 0).coerceAtLeast(0)
         // A save from before bosses were recorded: having reached level 11 means the first boss fell, and so on.
@@ -163,10 +174,13 @@ class Profile(private val store: KeyValueStore) {
 
     /** Every level a campaign run may start on, lowest first: 1, and the level after each boss beaten short of the last. */
     fun startLevels(): List<Int> =
-        (0..checkpoint / CHECKPOINT_EVERY).map { it * CHECKPOINT_EVERY + 1 }.filter { it < GameMode.CAMPAIGN_LENGTH }
+        (0..checkpoint / CHECKPOINT_EVERY).map { it * CHECKPOINT_EVERY + 1 }.filter { it < GameMode.CAMPAIGN_LENGTH && (!demo || it <= DEMO_LAST_LEVEL) }
 
-    /** Matrix opens with the first boss, Flow with the second, Endless with the third. */
-    fun unlocked(mode: GameMode): Boolean = checkpoint >= mode.unlockedBy
+    /** Matrix opens with the first boss, Flow with the second, Endless with the third - and the last two only in the full game. */
+    fun unlocked(mode: GameMode): Boolean = checkpoint >= mode.unlockedBy && (!demo || mode in DEMO_MODES)
+
+    /** True if a campaign run that has just cleared [level] has reached the end of the demo. */
+    fun demoEndsAfter(level: Int): Boolean = demo && level >= DEMO_LAST_LEVEL
 
     /** Takes stardust out of the bank, if there is enough. */
     fun spend(amount: Int): Boolean {
@@ -264,7 +278,7 @@ class Profile(private val store: KeyValueStore) {
             it.stardust = stardust; it.totalRuns = totalRuns; it.bestLevel = bestLevel
             it.initials = initials; it.lastSeed = lastSeed; it.musicOn = musicOn; it.sfxOn = sfxOn
             it.musicVol = musicVol; it.sfxVol = sfxVol; it.screenAlign = screenAlign
-            it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics; it.shake = shake
+            it.tilt = tilt; it.tiltSens = tiltSens; it.haptics = haptics; it.shake = shake; it.fullGame = fullGame
             it.checkpoint = checkpoint; it.startLevel = startLevel; it.dailyDay = dailyDay
             saved.copyInto(it.saved)
             it.owned += owned; it.scores += scores
@@ -288,6 +302,7 @@ class Profile(private val store: KeyValueStore) {
         store.put(K_TILT_SENS, tiltSens.toString())
         store.put(K_HAPTICS, if (haptics) "1" else "0")
         store.put(K_SHAKE, if (shake) "1" else "0")
+        store.put(K_FULL, if (fullGame) "1" else "0")
         store.put(K_CHECKPOINT, checkpoint.toString())
         store.put(K_START, startLevel.toString())
         store.put(K_SAVED, saved.joinToString(",") { it ?: "" })
@@ -314,6 +329,11 @@ class Profile(private val store: KeyValueStore) {
         private const val K_TILT_SENS = "tiltSens"
         private const val K_HAPTICS = "haptics"
         private const val K_SHAKE = "shake"
+        private const val K_FULL = "fullGame"
+
+        /** The demo is the campaign up to and including the first boss, plus the mode that boss opens. */
+        const val DEMO_LAST_LEVEL = 10
+        val DEMO_MODES = setOf(GameMode.CAMPAIGN, GameMode.MATRIX)
         private const val KEEP = 120
         private const val K_SEED = "lastSeed"
         private const val K_DAILY = "dailyDay"

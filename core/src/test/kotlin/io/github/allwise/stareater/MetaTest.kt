@@ -268,4 +268,37 @@ class MetaTest {
         p.shake = true
         assertTrue(Profile(MemoryStore().also { p.copyInto(it) }).shake)
     }
+
+    /** The demo: campaign to the first boss and Arcade Matrix. Buying lifts every limit, and is remembered. */
+    @Test
+    fun theDemoStopsAtTheFirstBossUntilTheFullGameIsBought() {
+        val p = Profile(MemoryStore())
+        p.beatBoss(10); p.beatBoss(20); p.beatBoss(30)
+        // No store (desktop): no demo, everything as before.
+        assertFalse(p.demo)
+        assertEquals(listOf(1, 11, 21), p.startLevels())
+        p.startLevel = 21
+
+        // On a phone, not bought yet.
+        p.storeSells = true
+        assertTrue(p.demo)
+        assertEquals(listOf(1), p.startLevels(), "no starting past the demo")
+        assertEquals(1, p.startLevel, "a start level from before falls back to 1")
+        assertTrue(p.unlocked(GameMode.CAMPAIGN) && p.unlocked(GameMode.MATRIX))
+        assertFalse(p.unlocked(GameMode.FLOW) || p.unlocked(GameMode.ENDLESS))
+        assertFalse(p.demoEndsAfter(9))
+        assertTrue(p.demoEndsAfter(10))
+
+        // Bought: everything back, the old start level included.
+        p.fullGame = true
+        assertFalse(p.demo)
+        assertEquals(21, p.startLevel)
+        assertTrue(p.unlocked(GameMode.ENDLESS))
+        assertFalse(p.demoEndsAfter(10))
+        val reloaded = Profile(MemoryStore().also { p.copyInto(it) })
+        assertTrue(reloaded.fullGame, "the purchase is remembered for playing offline")
+        // And wiping progress does not take a purchase away.
+        p.reset()
+        assertTrue(p.fullGame)
+    }
 }

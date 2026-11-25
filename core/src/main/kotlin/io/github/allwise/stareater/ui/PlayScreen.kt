@@ -137,6 +137,11 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                     // The last boss is down: that is the campaign, and the run ends in a win.
                     run.won = true
                     game.go(GameOverScreen(game, run))
+                } else if (run.mode == GameMode.CAMPAIGN && game.profile.demoEndsAfter(done)) {
+                    // The end of the demo: buy the rest and carry straight on, or stop here.
+                    run.level++
+                    run.prevMove = spec.move
+                    game.go(UnlockScreen(game, run))
                 } else {
                     run.level++
                     run.prevMove = spec.move
@@ -234,7 +239,7 @@ class PlayScreen(game: StarEaterGame, private val run: RunState, private val spe
                 if (next > 0) {
                     val mode = GameMode.values().firstOrNull { it.arcade && it.unlockedBy == spec.number }
                     unlocked = when {
-                        mode != null && next < GameMode.CAMPAIGN_LENGTH -> "${mode.title} UNLOCKED  -  AND THE CAMPAIGN CAN NOW START AT LEVEL $next"
+                        mode != null && next < GameMode.CAMPAIGN_LENGTH && !game.profile.demo -> "${mode.title} UNLOCKED  -  AND THE CAMPAIGN CAN NOW START AT LEVEL $next"
                         mode != null -> "${mode.title} UNLOCKED"
                         else -> ""
                     }

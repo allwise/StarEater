@@ -290,6 +290,9 @@ class RunState(val seed: Long, val key: String = "") {
     var itemsUsed = 0
     val pure: Boolean get() = itemsUsed == 0
 
+    /** Set when a run stops at the end of the demo, having beaten the first boss. */
+    var demoEnd = false
+
     /** Set when the campaign's last boss goes down: the run ended in a win, not a death. */
     var won = false
 }

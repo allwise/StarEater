@@ -73,6 +73,8 @@ kotlin {
 dependencies {
     implementation(project(":core"))
     implementation("com.badlogicgames.gdx:gdx-backend-android:$gdxVersion")
+    // The full-game unlock. Play wants a recent major version of this on every new upload.
+    implementation("com.android.billingclient:billing:8.0.0")
 
     for (abi in listOf("armeabi-v7a", "arm64-v8a", "x86", "x86_64")) {
         natives("com.badlogicgames.gdx:gdx-platform:$gdxVersion:natives-$abi")

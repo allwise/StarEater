@@ -44,8 +44,10 @@ desktop jar and the debug APK on every push: after pushing, check that run.
   and keep a copy in a password manager.
 - Raise `appVersionCode` in `gradle.properties` for every upload; Play refuses a repeat.
 - The package name `io.github.allwise.stareater` is permanent once the app exists in the Console.
-- Free vs paid cannot be changed later (free stays free), hence the plan: a free app with a one-time
-  in-app purchase that unlocks everything past level 10 (agreed, not built yet).
+- Free vs paid cannot be changed later (free stays free), hence: a free app with one non-consumable
+  in-app product, `full_game` (create it in the Console with exactly that id once a build with billing
+  is uploaded). `Store` (core) is the interface, `PlayStore` (android) is Play Billing 8, desktop has
+  none. Billing cannot be compiled or tried here: CI compiles it, a phone on a test track tries it.
 - targetSdk 36 turns on predictive back; the manifest opts out so the back button still reaches the
   game. Check pause-on-back on a phone after any targetSdk change.
 
@@ -129,6 +131,9 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
   is the one exception).
 - Saved slots keep a seed key and nothing else.
 - Cosmetics, when they come, must each be switchable off.
+- The demo (agreed 2026-11-25): campaign 1-10, Arcade Matrix, the skill tree, seeded and daily runs
+  capped at 10. The full game (one purchase, no ads, nothing else for sale) adds 11-30, Flow, Endless.
+  Offered at the end of a demo run (buy and carry on) and on the MORE page. `Profile.demo` holds the rule.
 - Screen shake is a setting, off by default (the owner does not like it; some players do).
   Vibration is on by default; every feel is a named `Buzz` in `input/Haptics.kt`.
 - With tilt steering on, touch only presses buttons: no floating stick, no tap-to-step, no pad.
@@ -141,8 +146,8 @@ signing, the AAB build and a 16 KB alignment check are in place and unverified o
 Store listing assets are in `store/` (screenshots, feature graphic, 512 icon; how they were made is in
 `store/README.md`). The privacy policy and a landing page are a static site in `site/`, meant for
 Cloudflare on allwise.dev (the Cloudflare tools here can read the account but not deploy, so the owner
-uploads it); its contact address is still the placeholder CONTACT_EMAIL. Still to build: the unlock purchase (Play Billing) with the level-10 demo cap, and Play Games
-leaderboards, both behind a `Platform`-style interface with a desktop no-op.
+uploads it); its contact address is still the placeholder CONTACT_EMAIL. The unlock purchase and the demo cap are built (2026-11-25), untried on a phone. Still to build: Play
+Games leaderboards, behind the same kind of interface with a desktop no-op.
 
 *As of 2026-11-21.*
 

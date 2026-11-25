@@ -20,6 +20,14 @@ There are four ways to play, and they open one boss at a time:
 | **Arcade Flow** | No skill tree. Every level glides: glide, scroller or orbit, never the grid. | boss 2 |
 | **Endless** | No skill tree. One level, dealt once, that never ends: each quota is a wave, and each wave is harder. | boss 3 |
 
+On Android the game is free to try: the **demo** is the campaign up to and including the first boss
+(levels 1 to 10), Arcade Matrix (which that boss opens), the skill tree, seeded runs and the daily run
+(both stopping at level 10). One in-app purchase, **UNLOCK FULL GAME** (Google Play product
+`full_game`), opens levels 11 to 30, Arcade Flow and Endless. It is offered when a demo run beats the
+first boss - buy it there and the run carries straight on into level 11 - and on the MORE page, with
+RESTORE for a reinstall or a new phone. There are no ads and nothing else to buy. On desktop there is
+no store and the whole game is open (`trial=1` pretends otherwise, with a purchase that goes through).
+
 Built with **Kotlin + [libGDX](https://libgdx.com/)**. Runs on desktop today; the Android module
 shares all of the game code.
 
@@ -405,7 +413,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 
 | Key | Meaning |
 |---|---|
-| `screen` | `menu`, `more` (the title screen's second page), `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options`, `pack`, `pitstop` |
+| `screen` | `menu`, `more` (the title screen's second page), `unlock` (with `won=1`: as at the end of the demo), `intro`, `play`, `over`, `skills`, `scores`, `seed`, `help`, `options`, `pack`, `pitstop` |
 | `level` | Level number to scale difficulty for |
 | `move` | `GRID`, `GLIDE`, `SCROLL` or `ORBIT` |
 | `mods` | Comma-separated rule ids: `fog,walls,shy,decay,swarm,countdown,meteors,restless,tail,gravity,inversion,deep,lightsout` |
@@ -417,6 +425,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `items` | Up to three pocket items: `overdrive,stun,wipe,flare,shield,pull` |
 | `won=1` | With `screen=over`: show the campaign-complete ending |
 | `key` | Seed key to show in the HUD and briefing, e.g. `STAR22` (for screenshots) |
+| `trial=1` | Pretend to have a store: the demo limits, and a pretend purchase on the UNLOCK screen |
 | `daily=done` | Pretend today's daily run has already been started |
 | `align` | Where the picture sits during a level: `-1` left, `0` centre, `1` right |
 | `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |

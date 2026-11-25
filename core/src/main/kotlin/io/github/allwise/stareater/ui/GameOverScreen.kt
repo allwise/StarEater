@@ -154,8 +154,10 @@ class GameOverScreen(game: StarEaterGame, private val run: RunState) : Screen(ga
         g.glow(cx, 470f, 360f, if (party) Pal.GOLD else Pal.RED, 0.14f)
         if (party) sparkles.celebrate(dt)
         sparkles.draw(dt)
-        g.text(g.huge, if (run.won) "CAMPAIGN COMPLETE" else "GAME OVER", cx, 518f, if (party) rainbow(age * 0.6f) else Pal.RED, 1f, Align.center)
-        if (run.won) g.text(g.small, "ALL THREE BOSSES DOWN. THE MACHINE IS YOURS: THE ARCADES AND ENDLESS ARE OPEN.", cx, 452f, Pal.GOLD, 1f, Align.center)
+        val heading = when { run.won -> "CAMPAIGN COMPLETE"; run.demoEnd -> "DEMO COMPLETE"; else -> "GAME OVER" }
+        g.text(g.huge, heading, cx, 518f, if (party || run.demoEnd) rainbow(age * 0.6f) else Pal.RED, 1f, Align.center)
+        if (run.demoEnd) g.text(g.small, "THE FIRST BOSS IS DOWN. LEVELS 11-30, FLOW AND ENDLESS ARE IN THE FULL GAME: MENU, MORE.", cx, 452f, Pal.GOLD, 1f, Align.center)
+        else if (run.won) g.text(g.small, "ALL THREE BOSSES DOWN. THE MACHINE IS YOURS: THE ARCADES AND ENDLESS ARE OPEN.", cx, 452f, Pal.GOLD, 1f, Align.center)
         else if (mode.arcade) g.text(g.small, if (pure) "${mode.title}  -  A PURE RUN: NOTHING USED FROM THE POCKETS" else mode.title, cx, 452f, if (pure) Pal.SHIELD else Pal.DIM, 1f, Align.center)
 
         // The score counts up, because of course it does.

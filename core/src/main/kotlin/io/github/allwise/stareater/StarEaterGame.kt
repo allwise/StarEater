@@ -37,6 +37,7 @@ import io.github.allwise.stareater.ui.ScoresScreen
 import io.github.allwise.stareater.ui.Screen
 import io.github.allwise.stareater.ui.SeedScreen
 import io.github.allwise.stareater.ui.SkillScreen
+import io.github.allwise.stareater.ui.UnlockScreen
 import java.util.zip.Deflater
 
 /**
@@ -57,6 +58,9 @@ class DevOptions(spec: String) {
     val boss: String? = map["boss"]
     val bot: Boolean = map["bot"] == "1"
     val auto: Boolean = map["auto"] == "1"
+
+    /** Pretend to be a phone with a store: the demo, and a pretend purchase that goes through. */
+    val trial: Boolean = map["trial"] == "1"
 
     /** Pretend today's daily run has already been started. */
     val dailyDone: Boolean = map["daily"] == "done"
@@ -99,6 +103,9 @@ interface Platform {
      * about, and a level is no time for the picture to decide to flip over.
      */
     fun lockOrientation(locked: Boolean) {}
+
+    /** Where the full game is bought. None on desktop. */
+    val store: Store get() = Store.None
 }
 
 class PrefsStore : KeyValueStore {
@@ -123,6 +130,26 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
     val devBot: Boolean get() = dev?.bot == true
     val devAuto: Boolean get() = dev?.auto == true
     val devPaused: Boolean get() = dev?.paused == true
+
+    private val store: Store by lazy { if (dev?.trial == true) PretendStore() else platform.store }
+
+    /** The unlock's price, formatted by the store, once it has said. */
+    var storePrice: String? = null
+        private set
+
+    /** The store's last word worth showing: a pending payment, no connection. Cleared by a purchase. */
+    var storeNote: String? = null
+        private set
+
+    fun buyFullGame() {
+        storeNote = null
+        store.buy()
+    }
+
+    fun restoreFullGame() {
+        storeNote = null
+        store.restore()
+    }
 
     /** True where there is a keyboard to hint at. */
     val keyHints: Boolean get() = Gdx.app.type == Application.ApplicationType.Desktop && dev?.phone != true
@@ -156,6 +183,21 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
         // Dev runs use a throwaway save so they never touch real progress.
         profile = Profile(if (dev != null) MemoryStore() else PrefsStore())
         if (dev != null) profile.screenAlign = dev.align
+        profile.storeSells = store.sells
+        if (store.sells) {
+            // The store answers on its own threads; everything it says is handed to the game's.
+            store.connect(object : StoreListener {
+                override fun owned(full: Boolean) = Gdx.app.postRunnable {
+                    if (full) storeNote = null
+                    if (profile.fullGame != full) {
+                        profile.fullGame = full
+                        profile.save()
+                    }
+                }
+                override fun price(text: String) = Gdx.app.postRunnable { storePrice = text }
+                override fun note(text: String) = Gdx.app.postRunnable { storeNote = text }
+            })
+        }
         audio = Audio(profile)
         audio.load()
         Gdx.input.inputProcessor = this
@@ -214,6 +256,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
             }
             "help" -> go(HelpScreen(this))
             "options" -> go(OptionsScreen(this))
+            "unlock" -> go(UnlockScreen(this, if (d.won) run.also { it.level = 11 } else null))
             "pack" -> go(PocketShop(this, run.also { it.level = 1 }, pitStop = false))
             "pitstop" -> go(PocketShop(this, run.also { it.dust = if (d.dust >= 0) d.dust.toFloat() else 180f }, pitStop = true))
             "seed" -> {
