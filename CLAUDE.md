@@ -144,12 +144,14 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 is personal for now (so Play's 12-testers-for-14-days closed test applies before production). Release
 signing, the AAB build and a 16 KB alignment check are in place and unverified on a real upload.
 Store listing assets are in `store/` (screenshots, feature graphic, 512 icon; how they were made is in
-`store/README.md`). The privacy policy and a landing page are a static site in `site/`, meant for
-Cloudflare on allwise.dev (the Cloudflare tools here can read the account but not deploy, so the owner
-uploads it); its contact address is still the placeholder CONTACT_EMAIL. The unlock purchase and the demo cap are built (2026-11-25), untried on a phone. Still to build: Play
+`store/README.md`). `site/` is the whole of allwise.dev as a static site: the Allwise front page
+(a one-person studio making the apps and games the owner wants to see), `stareater/` (the game's page,
+with screenshots) and `stareater/privacy.html` (the link for the Play Console). Contact address
+allwise.dev@outlook.com. The Cloudflare tools here can read the account but not deploy, so the owner
+uploads the folder. The unlock purchase and the demo cap are built (2026-11-25), untried on a phone. Still to build: Play
 Games leaderboards, behind the same kind of interface with a desktop no-op.
 
-*As of 2026-11-21.*
+*As of 2026-11-25.*
 
 **Playtested (2026-11-15): "a lot of good feel". Tilt and sound: "works well as is" (2026-11-18).** Two rounds of small things came back and are
 built and pushed, waiting on the next playtest:
