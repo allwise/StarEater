@@ -70,6 +70,28 @@ kotlin {
     compilerOptions { jvmTarget.set(JvmTarget.JVM_11) }
 }
 
+// A release bundle without the upload key is useless to Play, so building one by hand without it is
+// an error, not a quiet unsigned file. (CI sets CI=true and builds unsigned bundles on purpose.)
+gradle.taskGraph.whenReady {
+    if (!hasTask(":android:bundleRelease") && !hasTask(":android:assembleRelease")) return@whenReady
+    val release = android.signingConfigs.findByName("release")
+    val props = rootProject.file("keystore.properties")
+    if (release == null) {
+        if (System.getenv("CI") != null) return@whenReady
+        throw GradleException(
+            "No upload key found, so the release build would come out UNSIGNED and Play would refuse it.\n" +
+                "  Looked for: ${props.absolutePath} (${if (props.exists()) "exists, but has no storeFile line" else "does not exist"})\n" +
+                "  and the STAREATER_KEYSTORE environment variable (not set).\n" +
+                "  keystore.properties needs: storeFile, storePassword, keyAlias, keyPassword. On Windows, check the file is not really called keystore.properties.txt."
+        )
+    }
+    val store = release.storeFile
+    if (store == null || !store.exists()) {
+        throw GradleException("The upload keystore was not found at ${store?.absolutePath}. In keystore.properties, storeFile is relative to the project root; use forward slashes (C:/keys/upload.jks).")
+    }
+    logger.lifecycle("Release signing: ${store.absolutePath} (alias ${release.keyAlias})")
+}
+
 dependencies {
     implementation(project(":core"))
     implementation("com.badlogicgames.gdx:gdx-backend-android:$gdxVersion")
