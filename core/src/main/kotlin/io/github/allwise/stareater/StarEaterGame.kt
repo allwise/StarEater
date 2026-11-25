@@ -69,6 +69,9 @@ class DevOptions(spec: String) {
     val allSkills: Boolean = map["skills"] == "all"
     val dust: Int = map["dust"]?.toIntOrNull() ?: -1
     val seed: Long = map["seed"]?.toLongOrNull() ?: 1L
+
+    /** The seed key shown in the HUD and briefing (for screenshots); DEVRUN otherwise. */
+    val key: String = map["key"]?.uppercase()?.takeIf { it.length == 6 } ?: "DEVRUN"
     val mode: GameMode = when (map["mode"]?.lowercase()) {
         "matrix" -> GameMode.MATRIX
         "flow" -> GameMode.FLOW
@@ -176,7 +179,7 @@ class StarEaterGame(private val dev: DevOptions? = null, private val platform: P
                 for (s in Skill.values()) if (profile.buy(s)) bought = true
             }
         }
-        val run = RunState(d.seed, "DEVRUN")
+        val run = RunState(d.seed, d.key)
         run.level = d.level
         run.mode = d.mode
         if (d.mode.arcade) {

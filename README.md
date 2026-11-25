@@ -416,6 +416,7 @@ screenshots being saved. It uses a throwaway save, so it never touches real prog
 | `powers` | Comma-separated power-ups to start an arcade run with: `speed,frenzy,luck,shield,magnet,overdrive,echo` |
 | `items` | Up to three pocket items: `overdrive,stun,wipe,flare,shield,pull` |
 | `won=1` | With `screen=over`: show the campaign-complete ending |
+| `key` | Seed key to show in the HUD and briefing, e.g. `STAR22` (for screenshots) |
 | `daily=done` | Pretend today's daily run has already been started |
 | `align` | Where the picture sits during a level: `-1` left, `0` centre, `1` right |
 | `checkpoint` | Pretend every boss up to this level is beaten, e.g. `20` (also fills two saved-seed slots) |

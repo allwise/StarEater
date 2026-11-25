@@ -138,7 +138,10 @@ Keep `README.md` in step with the game in the same commit, and this file's statu
 **Publishing:** the owner is setting up a Norwegian sole proprietorship (ENK) first; the Play account
 is personal for now (so Play's 12-testers-for-14-days closed test applies before production). Release
 signing, the AAB build and a 16 KB alignment check are in place and unverified on a real upload.
-Still to build: the unlock purchase (Play Billing) with the level-10 demo cap, and Play Games
+Store listing assets are in `store/` (screenshots, feature graphic, 512 icon; how they were made is in
+`store/README.md`). The privacy policy and a landing page are a static site in `site/`, meant for
+Cloudflare on allwise.dev (the Cloudflare tools here can read the account but not deploy, so the owner
+uploads it); its contact address is still the placeholder CONTACT_EMAIL. Still to build: the unlock purchase (Play Billing) with the level-10 demo cap, and Play Games
 leaderboards, both behind a `Platform`-style interface with a desktop no-op.
 
 *As of 2026-11-21.*
